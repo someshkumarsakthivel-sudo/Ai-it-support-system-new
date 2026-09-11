@@ -12,6 +12,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     name: str | None = None
     email: EmailStr | None = None
+    password: str | None = None
     role_id: int | None = None
     team_id: int | None = None
 

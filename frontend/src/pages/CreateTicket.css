@@ -1,0 +1,274 @@
+.create-ticket-page {
+  min-height: 100vh;
+  padding: 36px 24px;
+  box-sizing: border-box;
+  background: #f4f7fb;
+}
+
+.create-ticket-container {
+  width: 100%;
+  max-width: 850px;
+  margin: 0 auto;
+}
+
+.create-ticket-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.page-label {
+  margin: 0 0 6px;
+  color: #1e3a8a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.create-ticket-header h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.page-description {
+  max-width: 650px;
+  margin: 8px 0 0;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cancel-button {
+  padding: 10px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel-button:hover {
+  background: #f9fafb;
+}
+
+.create-ticket-card {
+  padding: 30px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+}
+
+.form-section {
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.form-section h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.form-section p {
+  margin: 6px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.form-error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 22px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+}
+
+.form-error strong {
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.form-error span {
+  color: #b91c1c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.form-group {
+  margin-bottom: 22px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 7px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  outline: none;
+  background: #ffffff;
+  color: #111827;
+  font-size: 14px;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.form-group textarea {
+  min-height: 150px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  border-color: #1e3a8a;
+  box-shadow:
+    0 0 0 3px rgba(30, 58, 138, 0.1);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+  color: #9ca3af;
+}
+
+.field-help {
+  display: block;
+  margin-top: 6px;
+  color: #9ca3af;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.secondary-button {
+  padding: 11px 18px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: #f9fafb;
+}
+
+.submit-ticket-button {
+  padding: 11px 20px;
+  border: none;
+  border-radius: 7px;
+  background: #1e3a8a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submit-ticket-button:hover {
+  background: #172554;
+}
+
+.submit-ticket-button:disabled,
+.secondary-button:disabled,
+.cancel-button:disabled,
+.form-group input:disabled,
+.form-group textarea:disabled,
+.form-group select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.security-note {
+  margin-top: 18px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.security-note strong {
+  color: #374151;
+  font-size: 12px;
+}
+
+.security-note span {
+  color: #6b7280;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media (max-width: 650px) {
+  .create-ticket-page {
+    padding: 24px 16px;
+  }
+
+  .create-ticket-header {
+    flex-direction: column;
+  }
+
+  .cancel-button {
+    display: none;
+  }
+
+  .create-ticket-header h1 {
+    font-size: 25px;
+  }
+
+  .create-ticket-card {
+    padding: 22px 18px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .secondary-button,
+  .submit-ticket-button {
+    width: 100%;
+  }
+}

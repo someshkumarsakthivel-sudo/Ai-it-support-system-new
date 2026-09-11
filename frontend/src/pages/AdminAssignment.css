@@ -1,0 +1,367 @@
+.admin-assignment-page {
+  min-height: 100vh;
+  padding: 36px 24px;
+  box-sizing: border-box;
+  background: #f4f7fb;
+  color: #1f2937;
+}
+
+.admin-assignment-container {
+  width: 100%;
+  max-width: 1050px;
+  margin: 0 auto;
+}
+
+.assignment-back-button {
+  padding: 9px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.assignment-back-button:hover {
+  background: #f9fafb;
+}
+
+.assignment-header {
+  margin: 25px 0 20px;
+}
+
+.assignment-label {
+  margin: 0 0 6px;
+  color: #1e3a8a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.assignment-header h1 {
+  margin: 0;
+  color: #111827;
+  font-size: 30px;
+  line-height: 1.3;
+}
+
+.assignment-header > div > p:last-child {
+  margin: 7px 0 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.assignment-ticket-card,
+.assignment-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.assignment-ticket-card {
+  padding: 20px 22px;
+  margin-bottom: 24px;
+}
+
+.assignment-ticket-number {
+  color: #1e3a8a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.assignment-ticket-card h2 {
+  margin: 6px 0 0;
+  color: #111827;
+  font-size: 18px;
+}
+
+.assignment-ticket-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 12px;
+}
+
+.assignment-ticket-meta span {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.assignment-ticket-meta strong {
+  color: #374151;
+}
+
+.assignment-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.assignment-card {
+  overflow: hidden;
+}
+
+.assignment-card-header {
+  padding: 20px 22px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.assignment-card-header h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 16px;
+}
+
+.assignment-card-header p {
+  margin: 5px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.assignment-form {
+  padding: 22px;
+}
+
+.assignment-form-group {
+  margin-bottom: 22px;
+}
+
+.assignment-form-group label {
+  display: block;
+  margin-bottom: 7px;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.assignment-form-group select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 13px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  outline: none;
+  background: #ffffff;
+  color: #111827;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.assignment-form-group select:focus {
+  border-color: #1e3a8a;
+  box-shadow:
+    0 0 0 3px rgba(30, 58, 138, 0.1);
+}
+
+.assignment-form-group select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.assignment-form-group span {
+  display: block;
+  margin-top: 6px;
+  color: #9ca3af;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.assignment-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.assignment-secondary-button,
+.assignment-primary-button {
+  padding: 10px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.assignment-secondary-button {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #374151;
+}
+
+.assignment-secondary-button:hover {
+  background: #f9fafb;
+}
+
+.assignment-primary-button {
+  border: 1px solid #1e3a8a;
+  background: #1e3a8a;
+  color: #ffffff;
+}
+
+.assignment-primary-button:hover {
+  background: #172554;
+}
+
+.assignment-secondary-button:disabled,
+.assignment-primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.current-assignment {
+  padding: 8px 22px;
+}
+
+.current-assignment-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f0f1f3;
+}
+
+.current-assignment-item:last-child {
+  border-bottom: none;
+}
+
+.current-assignment-item span {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.current-assignment-item strong {
+  color: #374151;
+  font-size: 12px;
+  text-align: right;
+}
+
+.assignment-note {
+  margin: 16px 22px 22px;
+  padding: 13px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 7px;
+  background: #eff6ff;
+}
+
+.assignment-note strong {
+  color: #1e3a8a;
+  font-size: 11px;
+}
+
+.assignment-note p {
+  margin: 5px 0 0;
+  color: #6b7280;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.assignment-form-error {
+  margin-bottom: 20px;
+  padding: 11px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 12px;
+}
+
+.assignment-loading {
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.assignment-loading-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.assignment-loading h2 {
+  margin: 0;
+  color: #374151;
+  font-size: 18px;
+}
+
+.assignment-loading p {
+  margin: 7px 0 0;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.assignment-error {
+  padding: 40px 25px;
+  margin-top: 25px;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+}
+
+.assignment-error h2 {
+  margin: 0;
+  color: #374151;
+  font-size: 18px;
+}
+
+.assignment-error p {
+  margin: 8px 0 0;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .assignment-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-assignment-page {
+    padding: 24px 16px;
+  }
+
+  .assignment-header h1 {
+    font-size: 25px;
+  }
+
+  .assignment-ticket-meta {
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .assignment-form-actions {
+    flex-direction: column;
+  }
+
+  .assignment-secondary-button,
+  .assignment-primary-button {
+    width: 100%;
+  }
+
+  .current-assignment-item {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .current-assignment-item strong {
+    text-align: left;
+  }
+}

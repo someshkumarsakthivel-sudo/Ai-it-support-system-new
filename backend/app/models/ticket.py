@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -84,5 +84,15 @@ class Ticket(Base):
 
     closed_at: Mapped[datetime | None] = mapped_column(
         DateTime,
+        nullable=True
+    )
+
+    rating: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
+    )
+
+    feedback: Mapped[str | None] = mapped_column(
+        Text,
         nullable=True
     )

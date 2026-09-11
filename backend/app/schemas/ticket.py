@@ -33,6 +33,14 @@ class TicketAssignmentUpdate(BaseModel):
     team_id: int | None = None
 
 
+class TicketRatingCreate(BaseModel):
+    rating: int = Field(..., ge=1, le=5)
+    feedback: str | None = Field(
+        default=None,
+        max_length=2000
+    )
+
+
 class TicketResponse(BaseModel):
     id: int
     ticket_number: str
@@ -48,6 +56,8 @@ class TicketResponse(BaseModel):
     updated_at: datetime
     resolved_at: datetime | None
     closed_at: datetime | None
+    rating: int | None
+    feedback: str | None
 
     class Config:
         from_attributes = True

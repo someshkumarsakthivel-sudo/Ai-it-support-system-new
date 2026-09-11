@@ -9,6 +9,8 @@ from app.models.ai_analysis import AIAnalysis
 from app.models.sla_policy import SLAPolicy
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
+from app.models.knowledge_base import KnowledgeBaseArticle
+
 
 __all__ = [
     "Role",
@@ -22,4 +24,5 @@ __all__ = [
     "SLAPolicy",
     "Notification",
     "AuditLog",
+    "KnowledgeBaseArticle",
 ]
