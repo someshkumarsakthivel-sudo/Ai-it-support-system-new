@@ -1,3 +1,5 @@
+import json
+
 from google import genai
 
 from app.core.config import settings
@@ -13,7 +15,37 @@ client = genai.Client(
 def analyze_ticket(
     title: str,
     description: str,
+    knowledge_base_articles: list | None = None,
 ) -> dict:
+    """
+    Analyze an IT support ticket with optional Knowledge Base context.
+
+    AI provides recommendations, but does not make system changes.
+    """
+
+    knowledge_base_articles = (
+        knowledge_base_articles or []
+    )
+
+    if knowledge_base_articles:
+        knowledge_base_context = "\n\n".join(
+            [
+                (
+                    f"Article {index}:\n"
+                    f"Title: {article.title}\n"
+                    f"Content: {article.content}"
+                )
+                for index, article in enumerate(
+                    knowledge_base_articles,
+                    start=1,
+                )
+            ]
+        )
+    else:
+        knowledge_base_context = (
+            "No relevant Knowledge Base articles were found."
+        )
+
     prompt = f"""
 You are an IT support ticket analysis assistant.
 
@@ -24,6 +56,23 @@ Ticket title:
 
 Ticket description:
 {description}
+
+Relevant Knowledge Base articles:
+{knowledge_base_context}
+
+Use the Knowledge Base articles as supporting context when they are relevant.
+
+Important rules:
+
+1. Do not assume that a Knowledge Base article is correct for the ticket
+   unless its content is relevant.
+2. Do not invent facts from Knowledge Base articles.
+3. Prefer practical troubleshooting recommendations based on the
+   available ticket information and relevant Knowledge Base content.
+4. AI recommendations are advisory only. Do not claim that any action
+   has already been performed.
+5. If no Knowledge Base article is relevant, provide a recommendation
+   based on the ticket information alone.
 
 Return ONLY valid JSON with exactly these fields:
 
@@ -37,7 +86,7 @@ Return ONLY valid JSON with exactly these fields:
   "confidence_score": 0.0
 }}
 
-Rules:
+Rules for the JSON response:
 
 1. category should describe the main IT issue.
 2. subcategory should be more specific when possible.
@@ -61,8 +110,6 @@ Rules:
         text = text.replace("```json", "")
         text = text.replace("```", "")
         text = text.strip()
-
-    import json
 
     result = json.loads(text)
 

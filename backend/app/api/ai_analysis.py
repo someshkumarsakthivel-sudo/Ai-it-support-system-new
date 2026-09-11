@@ -7,6 +7,7 @@ from app.models.ai_analysis import AIAnalysis
 from app.models.user import User
 from app.schemas.ai_analysis import AIAnalysisResponse
 from app.services.gemini_service import analyze_ticket
+from app.services.knowledge_base_service import search_knowledge_base
 
 
 router = APIRouter(
@@ -72,10 +73,21 @@ def analyze_ticket_with_ai(
         )
 
     try:
+        # Search the published Knowledge Base for relevant articles.
+        knowledge_base_articles = search_knowledge_base(
+            title=ticket.title,
+            description=ticket.description,
+            db=db,
+            limit=5,
+        )
+
+        # Send the ticket together with relevant KB context to Gemini.
         ai_result = analyze_ticket(
             title=ticket.title,
             description=ticket.description,
+            knowledge_base_articles=knowledge_base_articles,
         )
+
     except Exception as exc:
         raise HTTPException(
             status_code=502,
@@ -109,7 +121,7 @@ def analyze_ticket_with_ai(
         summary=ai_result.get("summary"),
         recommendation=ai_result.get("recommendation"),
         confidence_score=confidence_score,
-        model_name="gemini-2.5-flash",
+        model_name="gemini-3.6-flash",
     )
 
     db.add(analysis)
