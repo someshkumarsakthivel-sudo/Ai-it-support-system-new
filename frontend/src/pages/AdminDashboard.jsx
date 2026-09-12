@@ -6,6 +6,9 @@ import {
   getTickets,
   getUsers,
   getTeams,
+  getMyNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
 } from "../services/api";
 
 import AdminTickets from "./AdminTickets";
@@ -26,17 +29,48 @@ function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [teams, setTeams] = useState([]);
 
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] =
+    useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [currentPage, setCurrentPage] =
-    useState("dashboard");
+  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [selectedTicketId, setSelectedTicketId] = useState(null);
+  const [showCreateTicket, setShowCreateTicket] = useState(false);
 
-  const [selectedTicketId, setSelectedTicketId] =
-    useState(null);
+  async function loadNotifications() {
+    try {
+      const accessToken =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
 
-  const [showCreateTicket, setShowCreateTicket] =
-    useState(false);
+      if (!accessToken) {
+        return;
+      }
+
+      // Get all notifications from the backend.
+      // We calculate unread count locally so one failed request
+      // cannot prevent the notification list from loading.
+      const notificationData = await getMyNotifications(accessToken);
+
+      const notificationList = Array.isArray(notificationData)
+        ? notificationData
+        : [];
+
+      setNotifications(notificationList);
+
+      const unreadCount = notificationList.filter(
+        (notification) => notification.is_read === false
+      ).length;
+
+      setUnreadNotificationCount(unreadCount);
+    } catch (err) {
+      console.error("Failed to load notifications:", err);
+    }
+  }
 
   async function loadAdminData() {
     try {
@@ -53,33 +87,27 @@ function AdminDashboard() {
         );
       }
 
-      const [
-        ticketData,
-        userData,
-        teamData,
-      ] = await Promise.all([
-        getTickets(accessToken),
-        getUsers(accessToken),
-        getTeams(accessToken),
-      ]);
+      const [ticketData, userData, teamData] =
+        await Promise.all([
+          getTickets(accessToken),
+          getUsers(accessToken),
+          getTeams(accessToken),
+        ]);
 
       setTickets(
-        Array.isArray(ticketData)
-          ? ticketData
-          : []
+        Array.isArray(ticketData) ? ticketData : []
       );
 
       setUsers(
-        Array.isArray(userData)
-          ? userData
-          : []
+        Array.isArray(userData) ? userData : []
       );
 
       setTeams(
-        Array.isArray(teamData)
-          ? teamData
-          : []
+        Array.isArray(teamData) ? teamData : []
       );
+
+      // Load notifications separately.
+      await loadNotifications();
     } catch (err) {
       console.error(err);
 
@@ -145,6 +173,7 @@ function AdminDashboard() {
     setShowCreateTicket(false);
     setSelectedTicketId(null);
     setCurrentPage("dashboard");
+
     loadAdminData();
   }
 
@@ -152,6 +181,7 @@ function AdminDashboard() {
     setSelectedTicketId(null);
     setShowCreateTicket(false);
     setCurrentPage("dashboard");
+
     loadAdminData();
   }
 
@@ -159,6 +189,7 @@ function AdminDashboard() {
     setSelectedTicketId(null);
     setShowCreateTicket(false);
     setCurrentPage("dashboard");
+
     loadAdminData();
   }
 
@@ -172,6 +203,7 @@ function AdminDashboard() {
     setSelectedTicketId(null);
     setShowCreateTicket(false);
     setCurrentPage("tickets");
+
     loadAdminData();
   }
 
@@ -179,12 +211,11 @@ function AdminDashboard() {
     setSelectedTicketId(null);
     setShowCreateTicket(false);
     setCurrentPage("tickets");
+
     loadAdminData();
   }
 
-  function handleAssignmentComplete(
-    updatedTicket
-  ) {
+  function handleAssignmentComplete(updatedTicket) {
     setSelectedTicketId(null);
     setShowCreateTicket(false);
     setCurrentPage("tickets");
@@ -200,75 +231,250 @@ function AdminDashboard() {
     loadAdminData();
   }
 
-  const totalTickets = tickets.length;
+  async function handleNotificationClick(notification) {
+    try {
+      const accessToken =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
 
-  const openTickets = tickets.filter(
-    (ticket) =>
-      ticket.status === "OPEN"
-  ).length;
+      if (!accessToken) {
+        return;
+      }
 
-  const inProgressTickets =
-    tickets.filter(
-      (ticket) =>
-        ticket.status === "IN_PROGRESS"
-    ).length;
+      if (!notification.is_read) {
+        await markNotificationAsRead(
+          accessToken,
+          notification.id
+        );
 
-  const resolvedTickets =
-    tickets.filter(
-      (ticket) =>
-        ticket.status === "RESOLVED"
-    ).length;
+        setNotifications((currentNotifications) =>
+          currentNotifications.map((item) =>
+            item.id === notification.id
+              ? {
+                  ...item,
+                  is_read: true,
+                  read_at: new Date().toISOString(),
+                }
+              : item
+          )
+        );
 
-  const assignedTickets =
-    tickets.filter(
-      (ticket) =>
-        ticket.status === "ASSIGNED"
-    ).length;
+        setUnreadNotificationCount((currentCount) =>
+          Math.max(currentCount - 1, 0)
+        );
+      }
 
-  const pendingTickets =
-    tickets.filter(
-      (ticket) =>
-        ticket.status === "PENDING"
-    ).length;
+      setShowNotifications(false);
 
-  const closedTickets =
-    tickets.filter(
-      (ticket) =>
-        ticket.status === "CLOSED"
-    ).length;
+      if (notification.ticket_id) {
+        handleOpenTicket(notification.ticket_id);
+      }
+    } catch (err) {
+      console.error(
+        "Failed to mark notification as read:",
+        err
+      );
+    }
+  }
 
-  const unassignedTickets =
-    tickets.filter(
-      (ticket) =>
-        ticket.assigned_to === null ||
-        ticket.assigned_to === undefined
-    ).length;
+  async function handleMarkAllNotificationsAsRead() {
+    try {
+      const accessToken =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
 
-  const activeUsers =
-    users.filter(
-      (item) => item.is_active
-    ).length;
+      if (!accessToken) {
+        return;
+      }
 
-  const activeEngineers =
-    users.filter(
-      (item) =>
-        item.role_id === 2 &&
-        item.is_active === true
-    ).length;
+      if (unreadNotificationCount === 0) {
+        return;
+      }
+
+      await markAllNotificationsAsRead(accessToken);
+
+      const readTime = new Date().toISOString();
+
+      setNotifications((currentNotifications) =>
+        currentNotifications.map((notification) => ({
+          ...notification,
+          is_read: true,
+          read_at:
+            notification.read_at || readTime,
+        }))
+      );
+
+      setUnreadNotificationCount(0);
+    } catch (err) {
+      console.error(
+        "Failed to mark all notifications as read:",
+        err
+      );
+    }
+  }
 
   function formatDate(dateString) {
     if (!dateString) {
       return "-";
     }
 
-    return new Date(
-      dateString
-    ).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    return new Date(dateString).toLocaleDateString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }
+    );
   }
+
+  function formatNotificationTime(dateString) {
+    if (!dateString) {
+      return "";
+    }
+
+    return new Date(dateString).toLocaleString(
+      "en-IN",
+      {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    );
+  }
+
+  function getNotificationIcon(notificationType) {
+    if (notificationType === "NEW_TICKET") {
+      return "T";
+    }
+
+    if (notificationType === "TICKET_ASSIGNED") {
+      return "A";
+    }
+
+    if (notificationType === "TICKET_STATUS_CHANGED") {
+      return "S";
+    }
+
+    return "!";
+  }
+
+  const totalTickets = tickets.length;
+
+  const openTickets = tickets.filter(
+    (ticket) => ticket.status === "OPEN"
+  ).length;
+
+  const inProgressTickets = tickets.filter(
+    (ticket) => ticket.status === "IN_PROGRESS"
+  ).length;
+
+  const resolvedTickets = tickets.filter(
+    (ticket) => ticket.status === "RESOLVED"
+  ).length;
+
+  const assignedTickets = tickets.filter(
+    (ticket) => ticket.status === "ASSIGNED"
+  ).length;
+
+  const pendingTickets = tickets.filter(
+    (ticket) => ticket.status === "PENDING"
+  ).length;
+
+  const closedTickets = tickets.filter(
+    (ticket) => ticket.status === "CLOSED"
+  ).length;
+
+  const unassignedTickets = tickets.filter(
+    (ticket) =>
+      ticket.assigned_to === null ||
+      ticket.assigned_to === undefined
+  ).length;
+
+  const activeUsers = users.filter(
+    (item) => item.is_active
+  ).length;
+
+  const activeEngineers = users.filter(
+    (item) =>
+      item.role_id === 2 &&
+      item.is_active === true
+  ).length;
+
+  const criticalTickets = tickets.filter(
+    (ticket) => ticket.priority === "CRITICAL"
+  ).length;
+
+  const highPriorityTickets = tickets.filter(
+    (ticket) => ticket.priority === "HIGH"
+  ).length;
+
+  const mediumPriorityTickets = tickets.filter(
+    (ticket) => ticket.priority === "MEDIUM"
+  ).length;
+
+  const lowPriorityTickets = tickets.filter(
+    (ticket) => ticket.priority === "LOW"
+  ).length;
+
+  const responseSLAMet = tickets.filter(
+    (ticket) => ticket.sla_response_met === true
+  ).length;
+
+  const responseSLABreached = tickets.filter(
+    (ticket) =>
+      ticket.sla_response_met === false ||
+      (
+        ticket.sla_response_met !== true &&
+        ticket.sla_response_deadline &&
+        new Date(ticket.sla_response_deadline).getTime() < Date.now()
+      )
+  ).length;
+
+  const resolutionSLAMet = tickets.filter(
+    (ticket) => ticket.sla_resolution_met === true
+  ).length;
+
+  const resolutionSLABreached = tickets.filter(
+    (ticket) =>
+      ticket.sla_resolution_met === false ||
+      (
+        ticket.sla_resolution_met !== true &&
+        ticket.sla_resolution_deadline &&
+        new Date(ticket.sla_resolution_deadline).getTime() < Date.now()
+      )
+  ).length;
+
+  const slaMetTotal =
+    responseSLAMet + resolutionSLAMet;
+
+  const slaBreachedTotal =
+    responseSLABreached + resolutionSLABreached;
+
+  const maxStatusCount = Math.max(
+    openTickets,
+    assignedTickets,
+    inProgressTickets,
+    pendingTickets,
+    resolvedTickets,
+    closedTickets,
+    1
+  );
+
+  const maxPriorityCount = Math.max(
+    criticalTickets,
+    highPriorityTickets,
+    mediumPriorityTickets,
+    lowPriorityTickets,
+    1
+  );
+
+  const maxSLACount = Math.max(
+    slaMetTotal,
+    slaBreachedTotal,
+    1
+  );
 
   if (
     loading &&
@@ -329,9 +535,7 @@ function AdminDashboard() {
   if (showCreateTicket) {
     return (
       <CreateTicket
-        onCancel={
-          handleCreateTicketCancel
-        }
+        onCancel={handleCreateTicketCancel}
       />
     );
   }
@@ -340,12 +544,8 @@ function AdminDashboard() {
     return (
       <AdminTickets
         onBack={handleBackFromTickets}
-        onOpenTicket={
-          handleOpenTicket
-        }
-        onAssignTicket={
-          handleAssignTicket
-        }
+        onOpenTicket={handleOpenTicket}
+        onAssignTicket={handleAssignTicket}
       />
     );
   }
@@ -358,14 +558,10 @@ function AdminDashboard() {
     );
   }
 
-  if (
-    currentPage === "knowledge-base"
-  ) {
+  if (currentPage === "knowledge-base") {
     return (
       <KnowledgeBase
-        onBack={
-          handleBackFromKnowledgeBase
-        }
+        onBack={handleBackFromKnowledgeBase}
       />
     );
   }
@@ -377,12 +573,8 @@ function AdminDashboard() {
     return (
       <AdminAssignment
         ticketId={selectedTicketId}
-        onBack={
-          handleBackFromAssignment
-        }
-        onAssigned={
-          handleAssignmentComplete
-        }
+        onBack={handleBackFromAssignment}
+        onAssigned={handleAssignmentComplete}
       />
     );
   }
@@ -394,9 +586,7 @@ function AdminDashboard() {
     return (
       <TicketDetails
         ticketId={selectedTicketId}
-        onBack={
-          handleBackFromTicketDetails
-        }
+        onBack={handleBackFromTicketDetails}
       />
     );
   }
@@ -425,9 +615,7 @@ function AdminDashboard() {
             type="button"
             className="admin-nav-item active"
             onClick={() =>
-              setCurrentPage(
-                "dashboard"
-              )
+              setCurrentPage("dashboard")
             }
           >
             Dashboard
@@ -436,9 +624,7 @@ function AdminDashboard() {
           <button
             type="button"
             className="admin-nav-item"
-            onClick={
-              handleOpenTickets
-            }
+            onClick={handleOpenTickets}
           >
             Tickets
           </button>
@@ -446,9 +632,7 @@ function AdminDashboard() {
           <button
             type="button"
             className="admin-nav-item"
-            onClick={
-              handleOpenUsers
-            }
+            onClick={handleOpenUsers}
           >
             Users
           </button>
@@ -469,10 +653,288 @@ function AdminDashboard() {
         </nav>
 
         <div className="admin-header-user">
+
+          {/* Notification Bell */}
+          <div
+            className="admin-notification-wrapper"
+            style={{
+              position: "relative",
+            }}
+          >
+            <button
+              type="button"
+              className="admin-notification-button"
+              onClick={() =>
+                setShowNotifications(
+                  (current) => !current
+                )
+              }
+              aria-label="Notifications"
+              style={{
+                position: "relative",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                fontSize: "24px",
+                padding: "8px",
+                lineHeight: "1",
+              }}
+            >
+              <span aria-hidden="true">{"\u{1F514}"}</span>
+
+              {unreadNotificationCount > 0 && (
+                <span
+                  className="admin-notification-badge"
+                  style={{
+                    position: "absolute",
+                    top: "0",
+                    right: "0",
+                    minWidth: "18px",
+                    height: "18px",
+                    padding: "0 4px",
+                    borderRadius: "999px",
+                    background: "#dc2626",
+                    color: "#ffffff",
+                    fontSize: "11px",
+                    fontWeight: "700",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {unreadNotificationCount > 99
+                    ? "99+"
+                    : unreadNotificationCount}
+                </span>
+              )}
+            </button>
+
+            {showNotifications && (
+              <div
+                className="admin-notification-dropdown"
+                style={{
+                  position: "absolute",
+                  top: "48px",
+                  right: "0",
+                  width: "380px",
+                  maxWidth:
+                    "calc(100vw - 32px)",
+                  background: "#ffffff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  boxShadow:
+                    "0 12px 30px rgba(0, 0, 0, 0.15)",
+                  zIndex: "1000",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  className="admin-notification-header"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 16px",
+                    borderBottom:
+                      "1px solid #e5e7eb",
+                  }}
+                >
+                  <div>
+                    <strong>
+                      Notifications
+                    </strong>
+
+                    <span
+                      style={{
+                        display: "block",
+                        marginTop: "3px",
+                        fontSize: "12px",
+                        color: "#6b7280",
+                      }}
+                    >
+                      {unreadNotificationCount}{" "}
+                      unread
+                    </span>
+                  </div>
+
+                  {unreadNotificationCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={
+                        handleMarkAllNotificationsAsRead
+                      }
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "#2563eb",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Mark all as read
+                    </button>
+                  )}
+                </div>
+
+                <div
+                  className="admin-notification-list"
+                  style={{
+                    maxHeight: "420px",
+                    overflowY: "auto",
+                  }}
+                >
+                  {notifications.length === 0 ? (
+                    <div
+                      style={{
+                        padding: "32px 20px",
+                        textAlign: "center",
+                        color: "#6b7280",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "28px",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Γ£ô
+                      </div>
+
+                      <strong
+                        style={{
+                          display: "block",
+                          color: "#374151",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        No notifications
+                      </strong>
+
+                      <span
+                        style={{
+                          fontSize: "13px",
+                        }}
+                      >
+                        You're all caught up.
+                      </span>
+                    </div>
+                  ) : (
+                    notifications.map(
+                      (notification) => (
+                        <button
+                          type="button"
+                          key={notification.id}
+                          onClick={() =>
+                            handleNotificationClick(
+                              notification
+                            )
+                          }
+                          style={{
+                            width: "100%",
+                            border: "none",
+                            borderBottom:
+                              "1px solid #f1f5f9",
+                            background:
+                              notification.is_read
+                                ? "#ffffff"
+                                : "#eff6ff",
+                            cursor: "pointer",
+                            textAlign: "left",
+                            padding: "14px 16px",
+                            display: "flex",
+                            gap: "12px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              flexShrink: "0",
+                              width: "34px",
+                              height: "34px",
+                              borderRadius: "10px",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              background:
+                                notification.is_read
+                                  ? "#f1f5f9"
+                                  : "#dbeafe",
+                              color: "#1d4ed8",
+                              fontWeight: "700",
+                              fontSize: "13px",
+                            }}
+                          >
+                            {getNotificationIcon(
+                              notification.type
+                            )}
+                          </span>
+
+                          <span
+                            style={{
+                              minWidth: "0",
+                              flex: "1",
+                            }}
+                          >
+                            <strong
+                              style={{
+                                display: "block",
+                                color: "#111827",
+                                fontSize: "13px",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              {notification.title}
+                            </strong>
+
+                            <span
+                              style={{
+                                display: "block",
+                                color: "#4b5563",
+                                fontSize: "12px",
+                                lineHeight: "1.5",
+                              }}
+                            >
+                              {notification.message}
+                            </span>
+
+                            <span
+                              style={{
+                                display: "block",
+                                marginTop: "6px",
+                                color: "#9ca3af",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {formatNotificationTime(
+                                notification.created_at
+                              )}
+                            </span>
+                          </span>
+
+                          {!notification.is_read && (
+                            <span
+                              style={{
+                                flexShrink: "0",
+                                width: "8px",
+                                height: "8px",
+                                borderRadius: "50%",
+                                background: "#2563eb",
+                                marginTop: "5px",
+                              }}
+                            />
+                          )}
+                        </button>
+                      )
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="admin-user-info">
             <strong>
-              {user.name ||
-                "System Admin"}
+              {user.name || "System Admin"}
             </strong>
 
             <span>
@@ -499,23 +961,19 @@ function AdminDashboard() {
 
             <h2>
               Welcome back,{" "}
-              {user.name ||
-                "System Admin"}
+              {user.name || "System Admin"}
             </h2>
 
             <p>
-              Monitor tickets, users and
-              support operations from one
-              place.
+              Monitor tickets, users and support
+              operations from one place.
             </p>
           </div>
 
           <button
             type="button"
             className="admin-create-ticket-button"
-            onClick={
-              handleOpenCreateTicket
-            }
+            onClick={handleOpenCreateTicket}
           >
             + Create Ticket
           </button>
@@ -528,13 +986,8 @@ function AdminDashboard() {
             </div>
 
             <div>
-              <span>
-                Total Tickets
-              </span>
-
-              <strong>
-                {totalTickets}
-              </strong>
+              <span>Total Tickets</span>
+              <strong>{totalTickets}</strong>
             </div>
           </div>
 
@@ -544,13 +997,8 @@ function AdminDashboard() {
             </div>
 
             <div>
-              <span>
-                Open
-              </span>
-
-              <strong>
-                {openTickets}
-              </strong>
+              <span>Open</span>
+              <strong>{openTickets}</strong>
             </div>
           </div>
 
@@ -560,13 +1008,8 @@ function AdminDashboard() {
             </div>
 
             <div>
-              <span>
-                In Progress
-              </span>
-
-              <strong>
-                {inProgressTickets}
-              </strong>
+              <span>In Progress</span>
+              <strong>{inProgressTickets}</strong>
             </div>
           </div>
 
@@ -576,76 +1019,41 @@ function AdminDashboard() {
             </div>
 
             <div>
-              <span>
-                Resolved
-              </span>
-
-              <strong>
-                {resolvedTickets}
-              </strong>
+              <span>Resolved</span>
+              <strong>{resolvedTickets}</strong>
             </div>
           </div>
         </section>
 
         <section className="admin-secondary-stats">
           <div className="admin-mini-stat">
-            <span>
-              Assigned
-            </span>
-
-            <strong>
-              {assignedTickets}
-            </strong>
+            <span>Assigned</span>
+            <strong>{assignedTickets}</strong>
           </div>
 
           <div className="admin-mini-stat">
-            <span>
-              Pending
-            </span>
-
-            <strong>
-              {pendingTickets}
-            </strong>
+            <span>Pending</span>
+            <strong>{pendingTickets}</strong>
           </div>
 
           <div className="admin-mini-stat">
-            <span>
-              Closed
-            </span>
-
-            <strong>
-              {closedTickets}
-            </strong>
+            <span>Closed</span>
+            <strong>{closedTickets}</strong>
           </div>
 
           <div className="admin-mini-stat">
-            <span>
-              Unassigned
-            </span>
-
-            <strong>
-              {unassignedTickets}
-            </strong>
+            <span>Unassigned</span>
+            <strong>{unassignedTickets}</strong>
           </div>
 
           <div className="admin-mini-stat">
-            <span>
-              Active Users
-            </span>
-
-            <strong>
-              {activeUsers}
-            </strong>
+            <span>Active Users</span>
+            <strong>{activeUsers}</strong>
           </div>
 
           <div className="admin-mini-stat">
-            <span>
-              Engineers
-            </span>
-
-            <strong>
-              {activeEngineers}
-            </strong>
+            <span>Engineers</span>
+            <strong>{activeEngineers}</strong>
           </div>
         </section>
 
@@ -653,22 +1061,17 @@ function AdminDashboard() {
           <div className="admin-panel">
             <div className="admin-panel-header">
               <div>
-                <h3>
-                  Recent Tickets
-                </h3>
+                <h3>Recent Tickets</h3>
 
                 <p>
-                  Latest tickets across the
-                  system
+                  Latest tickets across the system
                 </p>
               </div>
 
               <button
                 type="button"
                 className="admin-panel-action"
-                onClick={
-                  loadAdminData
-                }
+                onClick={loadAdminData}
               >
                 Refresh
               </button>
@@ -680,13 +1083,11 @@ function AdminDashboard() {
                   T
                 </div>
 
-                <h4>
-                  No tickets found
-                </h4>
+                <h4>No tickets found</h4>
 
                 <p>
-                  Tickets will appear here
-                  when employees create them.
+                  Tickets will appear here when
+                  employees create them.
                 </p>
               </div>
             ) : (
@@ -699,16 +1100,12 @@ function AdminDashboard() {
                       className="admin-ticket-row"
                       key={ticket.id}
                       onClick={() =>
-                        handleOpenTicket(
-                          ticket.id
-                        )
+                        handleOpenTicket(ticket.id)
                       }
                     >
                       <div className="admin-ticket-main">
                         <strong>
-                          {
-                            ticket.ticket_number
-                          }
+                          {ticket.ticket_number}
                         </strong>
 
                         <span>
@@ -738,9 +1135,7 @@ function AdminDashboard() {
           <div className="admin-panel">
             <div className="admin-panel-header">
               <div>
-                <h3>
-                  System Overview
-                </h3>
+                <h3>System Overview</h3>
 
                 <p>
                   Current support resources
@@ -755,13 +1150,10 @@ function AdminDashboard() {
                 </div>
 
                 <div>
-                  <strong>
-                    Users
-                  </strong>
+                  <strong>Users</strong>
 
                   <span>
-                    {activeUsers} active
-                    users
+                    {activeUsers} active users
                   </span>
                 </div>
               </div>
@@ -789,9 +1181,7 @@ function AdminDashboard() {
                 </div>
 
                 <div>
-                  <strong>
-                    Support Teams
-                  </strong>
+                  <strong>Support Teams</strong>
 
                   <span>
                     {teams.length} teams
@@ -819,12 +1209,315 @@ function AdminDashboard() {
           </div>
         </section>
 
+        {/* Analytics */}
+
+        <section
+          className="admin-panel"
+          style={{
+            marginTop: "24px",
+          }}
+        >
+          <div className="admin-panel-header">
+            <div>
+              <h3>Support Analytics</h3>
+
+              <p>
+                Ticket distribution and SLA performance across
+                the support system.
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(280px, 1fr))",
+              gap: "20px",
+            }}
+          >
+            {/* Ticket Status */}
+
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: "12px",
+                padding: "18px",
+                background: "#ffffff",
+              }}
+            >
+              <h4
+                style={{
+                  margin: "0 0 16px",
+                  fontSize: "15px",
+                  color: "#111827",
+                }}
+              >
+                Ticket Status
+              </h4>
+
+              {[
+                ["Open", openTickets],
+                ["Assigned", assignedTickets],
+                ["In Progress", inProgressTickets],
+                ["Pending", pendingTickets],
+                ["Resolved", resolvedTickets],
+                ["Closed", closedTickets],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: "12px",
+                      marginBottom: "5px",
+                      color: "#4b5563",
+                    }}
+                  >
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+
+                  <div
+                    style={{
+                      height: "8px",
+                      background: "#f1f5f9",
+                      borderRadius: "999px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.min(
+                          (value / maxStatusCount) * 100,
+                          100
+                        )}%`,
+                        height: "100%",
+                        background:
+                          "linear-gradient(90deg, #2563eb, #60a5fa)",
+                        borderRadius: "999px",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Priority */}
+
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: "12px",
+                padding: "18px",
+                background: "#ffffff",
+              }}
+            >
+              <h4
+                style={{
+                  margin: "0 0 16px",
+                  fontSize: "15px",
+                  color: "#111827",
+                }}
+              >
+                Ticket Priority
+              </h4>
+
+              {[
+                ["Critical", criticalTickets],
+                ["High", highPriorityTickets],
+                ["Medium", mediumPriorityTickets],
+                ["Low", lowPriorityTickets],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: "12px",
+                      marginBottom: "5px",
+                      color: "#4b5563",
+                    }}
+                  >
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+
+                  <div
+                    style={{
+                      height: "8px",
+                      background: "#f1f5f9",
+                      borderRadius: "999px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.min(
+                          (value / maxPriorityCount) * 100,
+                          100
+                        )}%`,
+                        height: "100%",
+                        background:
+                          "linear-gradient(90deg, #7c3aed, #a78bfa)",
+                        borderRadius: "999px",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* SLA */}
+
+            <div
+              style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: "12px",
+                padding: "18px",
+                background: "#ffffff",
+              }}
+            >
+              <h4
+                style={{
+                  margin: "0 0 16px",
+                  fontSize: "15px",
+                  color: "#111827",
+                }}
+              >
+                SLA Performance
+              </h4>
+
+              {[
+                ["SLA Met", slaMetTotal],
+                ["SLA Breached", slaBreachedTotal],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  style={{
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      fontSize: "12px",
+                      marginBottom: "5px",
+                      color: "#4b5563",
+                    }}
+                  >
+                    <span>{label}</span>
+                    <strong>{value}</strong>
+                  </div>
+
+                  <div
+                    style={{
+                      height: "8px",
+                      background: "#f1f5f9",
+                      borderRadius: "999px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.min(
+                          (value / maxSLACount) * 100,
+                          100
+                        )}%`,
+                        height: "100%",
+                        background:
+                          label === "SLA Met"
+                            ? "linear-gradient(90deg, #059669, #34d399)"
+                            : "linear-gradient(90deg, #dc2626, #f87171)",
+                        borderRadius: "999px",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(2, minmax(0, 1fr))",
+                  gap: "10px",
+                  marginTop: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    background: "#ecfdf5",
+                    borderRadius: "10px",
+                    padding: "12px",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: "11px",
+                      color: "#047857",
+                    }}
+                  >
+                    Response SLA Met
+                  </span>
+
+                  <strong
+                    style={{
+                      fontSize: "20px",
+                      color: "#065f46",
+                    }}
+                  >
+                    {responseSLAMet}
+                  </strong>
+                </div>
+
+                <div
+                  style={{
+                    background: "#fef2f2",
+                    borderRadius: "10px",
+                    padding: "12px",
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      fontSize: "11px",
+                      color: "#b91c1c",
+                    }}
+                  >
+                    Resolution SLA Breached
+                  </span>
+
+                  <strong
+                    style={{
+                      fontSize: "20px",
+                      color: "#991b1b",
+                    }}
+                  >
+                    {resolutionSLABreached}
+                  </strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="admin-panel admin-quick-actions-panel">
           <div className="admin-panel-header">
             <div>
-              <h3>
-                Administration
-              </h3>
+              <h3>Administration</h3>
 
               <p>
                 Common management actions
@@ -836,22 +1529,17 @@ function AdminDashboard() {
             <button
               type="button"
               className="admin-quick-action"
-              onClick={
-                handleOpenUsers
-              }
+              onClick={handleOpenUsers}
             >
               <span className="admin-quick-icon">
                 U
               </span>
 
               <div>
-                <strong>
-                  Manage Users
-                </strong>
+                <strong>Manage Users</strong>
 
                 <span>
-                  Add, update or deactivate
-                  users
+                  Add, update or deactivate users
                 </span>
               </div>
             </button>
@@ -865,9 +1553,7 @@ function AdminDashboard() {
               </span>
 
               <div>
-                <strong>
-                  Manage Teams
-                </strong>
+                <strong>Manage Teams</strong>
 
                 <span>
                   Configure support teams
@@ -884,9 +1570,7 @@ function AdminDashboard() {
               </span>
 
               <div>
-                <strong>
-                  Manage Categories
-                </strong>
+                <strong>Manage Categories</strong>
 
                 <span>
                   Configure ticket categories
@@ -897,22 +1581,17 @@ function AdminDashboard() {
             <button
               type="button"
               className="admin-quick-action"
-              onClick={
-                handleOpenKnowledgeBase
-              }
+              onClick={handleOpenKnowledgeBase}
             >
               <span className="admin-quick-icon">
                 K
               </span>
 
               <div>
-                <strong>
-                  Knowledge Base
-                </strong>
+                <strong>Knowledge Base</strong>
 
                 <span>
-                  Manage troubleshooting
-                  articles
+                  Manage troubleshooting articles
                 </span>
               </div>
             </button>

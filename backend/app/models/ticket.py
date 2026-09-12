@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -94,5 +103,25 @@ class Ticket(Base):
 
     feedback: Mapped[str | None] = mapped_column(
         Text,
+        nullable=True
+    )
+
+    sla_response_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True
+    )
+
+    sla_resolution_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True
+    )
+
+    sla_response_met: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True
+    )
+
+    sla_resolution_met: Mapped[bool | None] = mapped_column(
+        Boolean,
         nullable=True
     )

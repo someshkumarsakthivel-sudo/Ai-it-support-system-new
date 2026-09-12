@@ -1,9 +1,16 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_db, get_current_user
-from app.models.ticket import Ticket
+from app.core.dependencies import get_current_user, get_db
 from app.models.ai_analysis import AIAnalysis
+from app.models.ai_analysis_knowledge_base import (
+    AIAnalysisKnowledgeBase,
+)
+from app.models.knowledge_base import KnowledgeBaseArticle
+from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.ai_analysis import AIAnalysisResponse
 from app.services.gemini_service import analyze_ticket
@@ -14,6 +21,41 @@ router = APIRouter(
     prefix="/api/ai",
     tags=["AI Support"],
 )
+
+
+class ValidatedAIResult(BaseModel):
+    """
+    Internal validation model for Gemini output.
+
+    This model validates the AI response before it is
+    stored in the database.
+    """
+
+    category: str | None = None
+
+    subcategory: str | None = None
+
+    priority: Literal[
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL",
+    ]
+
+    sentiment: Literal[
+        "POSITIVE",
+        "NEUTRAL",
+        "NEGATIVE",
+    ]
+
+    summary: str
+
+    recommendation: str
+
+    confidence_score: float = Field(
+        ge=0.0,
+        le=1.0,
+    )
 
 
 @router.post(
@@ -73,7 +115,8 @@ def analyze_ticket_with_ai(
         )
 
     try:
-        # Search the published Knowledge Base for relevant articles.
+        # Search the published Knowledge Base for
+        # articles relevant to this ticket.
         knowledge_base_articles = search_knowledge_base(
             title=ticket.title,
             description=ticket.description,
@@ -81,7 +124,8 @@ def analyze_ticket_with_ai(
             limit=5,
         )
 
-        # Send the ticket together with relevant KB context to Gemini.
+        # Send the ticket together with relevant
+        # Knowledge Base context to Gemini.
         ai_result = analyze_ticket(
             title=ticket.title,
             description=ticket.description,
@@ -94,38 +138,91 @@ def analyze_ticket_with_ai(
             detail=f"AI analysis failed: {str(exc)}",
         )
 
-    try:
-        confidence_score = float(
-            ai_result.get(
-                "confidence_score",
-                0.0,
-            )
-        )
-    except (TypeError, ValueError):
-        confidence_score = 0.0
+    # ------------------------------------------------
+    # Validate Gemini output before database save
+    # ------------------------------------------------
 
-    confidence_score = max(
-        0.0,
-        min(
-            1.0,
-            confidence_score,
-        ),
-    )
+    try:
+        validated_result = ValidatedAIResult.model_validate(
+            ai_result
+        )
+
+    except ValidationError:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                "AI returned an invalid response. "
+                "The analysis was not saved."
+            ),
+        )
+
+    # ------------------------------------------------
+    # Create database record only after validation
+    # ------------------------------------------------
 
     analysis = AIAnalysis(
         ticket_id=ticket.id,
-        category=ai_result.get("category"),
-        subcategory=ai_result.get("subcategory"),
-        priority=ai_result.get("priority"),
-        sentiment=ai_result.get("sentiment"),
-        summary=ai_result.get("summary"),
-        recommendation=ai_result.get("recommendation"),
-        confidence_score=confidence_score,
+        category=validated_result.category,
+        subcategory=validated_result.subcategory,
+        priority=validated_result.priority,
+        sentiment=validated_result.sentiment,
+        summary=validated_result.summary,
+        recommendation=validated_result.recommendation,
+        confidence_score=validated_result.confidence_score,
         model_name="gemini-3.6-flash",
     )
 
     db.add(analysis)
+    db.flush()
+
+    # Store the Knowledge Base articles used for
+    # this validated AI analysis.
+    for article in knowledge_base_articles:
+        analysis_knowledge_base = AIAnalysisKnowledgeBase(
+            ai_analysis_id=analysis.id,
+            knowledge_base_article_id=article.id,
+        )
+
+        db.add(analysis_knowledge_base)
+
     db.commit()
     db.refresh(analysis)
 
-    return analysis
+    # Load the Knowledge Base articles linked to this analysis.
+    knowledge_base_links = (
+        db.query(KnowledgeBaseArticle)
+        .join(
+            AIAnalysisKnowledgeBase,
+            AIAnalysisKnowledgeBase.knowledge_base_article_id
+            == KnowledgeBaseArticle.id,
+        )
+        .filter(
+            AIAnalysisKnowledgeBase.ai_analysis_id
+            == analysis.id,
+        )
+        .order_by(
+            KnowledgeBaseArticle.id.asc(),
+        )
+        .all()
+    )
+
+    return {
+        "id": analysis.id,
+        "ticket_id": analysis.ticket_id,
+        "category": analysis.category,
+        "subcategory": analysis.subcategory,
+        "priority": analysis.priority,
+        "sentiment": analysis.sentiment,
+        "summary": analysis.summary,
+        "recommendation": analysis.recommendation,
+        "confidence_score": analysis.confidence_score,
+        "model_name": analysis.model_name,
+        "created_at": analysis.created_at,
+        "knowledge_base_articles": [
+            {
+                "id": article.id,
+                "title": article.title,
+            }
+            for article in knowledge_base_links
+        ],
+    }

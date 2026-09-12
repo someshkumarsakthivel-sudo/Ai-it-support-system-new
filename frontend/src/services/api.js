@@ -12,9 +12,7 @@ async function apiRequest(endpoint, options = {}) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(
-      data?.detail || "Something went wrong"
-    );
+    throw new Error(data?.detail || "Something went wrong");
   }
 
   return data;
@@ -310,7 +308,6 @@ export async function uploadTicketAttachment(
   file
 ) {
   const formData = new FormData();
-
   formData.append("file", file);
 
   const response = await fetch(
@@ -324,7 +321,9 @@ export async function uploadTicketAttachment(
     }
   );
 
-  const data = await response.json().catch(() => null);
+  const data = await response
+    .json()
+    .catch(() => null);
 
   if (!response.ok) {
     throw new Error(
@@ -353,7 +352,9 @@ export async function downloadTicketAttachment(
   );
 
   if (!response.ok) {
-    const data = await response.json().catch(() => null);
+    const data = await response
+      .json()
+      .catch(() => null);
 
     throw new Error(
       data?.detail ||
@@ -363,7 +364,8 @@ export async function downloadTicketAttachment(
 
   const blob = await response.blob();
 
-  const downloadUrl = window.URL.createObjectURL(blob);
+  const downloadUrl =
+    window.URL.createObjectURL(blob);
 
   const link = document.createElement("a");
 
@@ -371,10 +373,14 @@ export async function downloadTicketAttachment(
   link.download = fileName;
 
   document.body.appendChild(link);
+
   link.click();
+
   link.remove();
 
-  window.URL.revokeObjectURL(downloadUrl);
+  window.URL.revokeObjectURL(
+    downloadUrl
+  );
 }
 
 // --------------------------------------------------
@@ -445,6 +451,75 @@ export async function updateTicketAssignment(
         team_id:
           assignmentData.team_id ?? null,
       }),
+    }
+  );
+}
+
+// --------------------------------------------------
+// Notifications
+// --------------------------------------------------
+
+export async function getMyNotifications(
+  accessToken
+) {
+  return apiRequest("/api/notifications", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+export async function getUnreadNotifications(
+  accessToken
+) {
+  return apiRequest("/api/notifications/unread", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+}
+
+export async function getUnreadNotificationCount(
+  accessToken
+) {
+  return apiRequest(
+    "/api/notifications/unread-count",
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+}
+
+export async function markNotificationAsRead(
+  accessToken,
+  notificationId
+) {
+  return apiRequest(
+    `/api/notifications/${notificationId}/read`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+}
+
+export async function markAllNotificationsAsRead(
+  accessToken
+) {
+  return apiRequest(
+    "/api/notifications/read-all",
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     }
   );
 }

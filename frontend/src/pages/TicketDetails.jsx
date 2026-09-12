@@ -15,22 +15,9 @@ import {
   analyzeTicketWithAI,
 } from "../services/api";
 
-import AdminAssignment from "./AdminAssignment";
+import AdminAssignment from "../components/AdminAssignment";
 
 function TicketDetails({ ticketId, onBack }) {
-  const storedUser =
-    localStorage.getItem("user") ||
-    sessionStorage.getItem("user") ||
-    "{}";
-
-  let user = {};
-
-  try {
-    user = JSON.parse(storedUser);
-  } catch {
-    user = {};
-  }
-
   const [ticket, setTicket] = useState(null);
   const [categories, setCategories] = useState([]);
   const [comments, setComments] = useState([]);
@@ -43,7 +30,6 @@ function TicketDetails({ ticketId, onBack }) {
 
   const [selectedRating, setSelectedRating] = useState(0);
   const [feedbackText, setFeedbackText] = useState("");
-
   const [submittingRating, setSubmittingRating] = useState(false);
 
   const [aiAnalysis, setAiAnalysis] = useState(null);
@@ -52,16 +38,16 @@ function TicketDetails({ ticketId, onBack }) {
   const [aiSuccess, setAiSuccess] = useState("");
 
   const [loading, setLoading] = useState(true);
-  const [loadingComments, setLoadingComments] = useState(true);
-  const [loadingAttachments, setLoadingAttachments] = useState(true);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
 
   const [submittingComment, setSubmittingComment] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
+
   const [downloadingAttachmentId, setDownloadingAttachmentId] =
     useState(null);
 
   const [updatingStatus, setUpdatingStatus] = useState(false);
-
   const [showAssignment, setShowAssignment] = useState(false);
 
   const [error, setError] = useState("");
@@ -71,18 +57,47 @@ function TicketDetails({ ticketId, onBack }) {
   const [ratingError, setRatingError] = useState("");
   const [ratingSuccess, setRatingSuccess] = useState("");
 
+  const [currentTime, setCurrentTime] = useState(new Date());
+
   const fileInputRef = useRef(null);
 
+  const getAccessToken = () => {
+    return (
+      localStorage.getItem("access_token") ||
+      sessionStorage.getItem("access_token")
+    );
+  };
+
+  const getStoredUser = () => {
+    const storedUser =
+      localStorage.getItem("user") ||
+      sessionStorage.getItem("user");
+
+    if (!storedUser) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(storedUser);
+    } catch {
+      return null;
+    }
+  };
+
+  const user = getStoredUser();
+  const accessToken = getAccessToken();
+
   const canUseInternalComments =
-    user.role_id === 2 || user.role_id === 3;
+    user?.role_id === 2 || user?.role_id === 3;
 
   const canUseAI =
-    user.role_id === 1 ||
-    user.role_id === 2 ||
-    user.role_id === 3;
+    user?.role_id === 1 ||
+    user?.role_id === 2 ||
+    user?.role_id === 3;
 
   const isTicketCreator =
     ticket &&
+    user &&
     ticket.created_by === user.user_id;
 
   const hasExistingRating =
@@ -91,7 +106,7 @@ function TicketDetails({ ticketId, onBack }) {
     ticket.rating !== undefined;
 
   const canRateTicket =
-    user.role_id === 1 &&
+    user?.role_id === 1 &&
     isTicketCreator &&
     (ticket?.status === "RESOLVED" ||
       ticket?.status === "CLOSED");
@@ -99,7 +114,7 @@ function TicketDetails({ ticketId, onBack }) {
   const canShowAIAnalysis =
     canUseAI && ticket !== null;
 
-  const allowedExtensions = [
+  const allowedFileExtensions = [
     ".pdf",
     ".png",
     ".jpg",
@@ -109,142 +124,190 @@ function TicketDetails({ ticketId, onBack }) {
     ".docx",
   ];
 
-  async function loadComments(accessToken) {
+  // ----------------------------------------
+  // Live Clock For SLA
+  // ----------------------------------------
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+
+  // ----------------------------------------
+  // Convert Backend UTC Timestamp
+  // ----------------------------------------
+
+  const parseBackendDate = (dateValue) => {
+    if (!dateValue) {
+      return null;
+    }
+
+    if (dateValue instanceof Date) {
+      return dateValue;
+    }
+
+    const value = String(dateValue);
+
+    /*
+     * Backend currently stores UTC timestamps without a timezone suffix.
+     * Example:
+     *
+     * 2026-09-11T17:19:20
+     *
+     * Add Z so JavaScript correctly interprets the value as UTC.
+     */
+    if (
+      !value.endsWith("Z") &&
+      !value.includes("+") &&
+      !/[+-]\d{2}:\d{2}$/.test(value)
+    ) {
+      return new Date(`${value}Z`);
+    }
+
+    return new Date(value);
+  };
+
+  // ----------------------------------------
+  // Back to Dashboard
+  // ----------------------------------------
+
+  const handleBackToDashboard = () => {
+    if (onBack) {
+      onBack();
+    }
+  };
+
+  // ----------------------------------------
+  // Load Comments
+  // ----------------------------------------
+
+  const loadComments = async () => {
+    if (!ticketId || !accessToken) {
+      return;
+    }
+
+    setLoadingComments(true);
+    setCommentError("");
+
     try {
-      setLoadingComments(true);
-      setCommentError("");
-
-      const commentData =
-        await getTicketComments(
-          accessToken,
-          ticketId
-        );
-
-      setComments(
-        Array.isArray(commentData)
-          ? commentData
-          : []
+      const response = await getTicketComments(
+        accessToken,
+        ticketId
       );
+
+      setComments(response || []);
     } catch (err) {
       setCommentError(
-        err.message ||
-          "Failed to load ticket activity."
+        err?.message || "Failed to load comments."
       );
     } finally {
       setLoadingComments(false);
     }
-  }
+  };
 
-  async function loadAttachments(accessToken) {
+  // ----------------------------------------
+  // Load Attachments
+  // ----------------------------------------
+
+  const loadAttachments = async () => {
+    if (!ticketId || !accessToken) {
+      return;
+    }
+
+    setLoadingAttachments(true);
+    setAttachmentError("");
+
     try {
-      setLoadingAttachments(true);
-      setAttachmentError("");
-
-      const attachmentData =
-        await getTicketAttachments(
-          accessToken,
-          ticketId
-        );
-
-      setAttachments(
-        Array.isArray(attachmentData)
-          ? attachmentData
-          : []
+      const response = await getTicketAttachments(
+        accessToken,
+        ticketId
       );
+
+      setAttachments(response || []);
     } catch (err) {
       setAttachmentError(
-        err.message ||
-          "Failed to load attachments."
+        err?.message || "Failed to load attachments."
       );
     } finally {
       setLoadingAttachments(false);
     }
-  }
+  };
+
+  // ----------------------------------------
+  // Load Ticket
+  // ----------------------------------------
 
   useEffect(() => {
-    async function loadTicketDetails() {
+    const loadTicketData = async () => {
+      if (!ticketId) {
+        setError("Ticket ID is missing.");
+        setLoading(false);
+        return;
+      }
+
+      if (!accessToken) {
+        setError(
+          "Authentication token is missing. Please log in again."
+        );
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
       try {
-        setLoading(true);
-        setError("");
-        setAiError("");
-        setAiSuccess("");
-        setStatusError("");
-        setCommentError("");
-        setAttachmentError("");
-        setRatingError("");
-        setRatingSuccess("");
+        const [
+          ticketResponse,
+          categoriesResponse,
+        ] = await Promise.all([
+          getTicket(accessToken, ticketId),
+          getCategories(accessToken),
+        ]);
 
-        const accessToken =
-          localStorage.getItem("access_token") ||
-          sessionStorage.getItem("access_token");
-
-        if (!accessToken) {
-          throw new Error(
-            "Your session has expired. Please log in again."
-          );
-        }
-
-        const ticketData =
-          await getTicket(
-            accessToken,
-            ticketId
-          );
-
-        setTicket(ticketData);
+        setTicket(ticketResponse);
+        setCategories(categoriesResponse || []);
 
         if (
-          user.role_id === 1 &&
-          ticketData.created_by === user.user_id
+          ticketResponse.rating !== null &&
+          ticketResponse.rating !== undefined
         ) {
-          setSelectedRating(
-            ticketData.rating || 0
-          );
-
-          setFeedbackText(
-            ticketData.feedback || ""
-          );
-        } else {
-          setSelectedRating(0);
-          setFeedbackText("");
+          setSelectedRating(ticketResponse.rating);
         }
 
-        try {
-          const categoryData =
-            await getCategories(
-              accessToken
-            );
-
-          setCategories(
-            Array.isArray(categoryData)
-              ? categoryData
-              : []
-          );
-        } catch {
-          setCategories([]);
+        if (ticketResponse.feedback) {
+          setFeedbackText(ticketResponse.feedback);
         }
 
-        await loadComments(accessToken);
-        await loadAttachments(accessToken);
+        await Promise.all([
+          loadComments(),
+          loadAttachments(),
+        ]);
       } catch (err) {
-        console.error(err);
-
         setError(
-          err.message ||
+          err?.message ||
             "Failed to load ticket details."
         );
       } finally {
         setLoading(false);
       }
-    }
+    };
 
-    if (ticketId) {
-      loadTicketDetails();
-    }
-  }, [ticketId]);
+    loadTicketData();
+  }, [ticketId, accessToken]);
 
-  function getCategoryName(categoryId) {
+  // ----------------------------------------
+  // Category
+  // ----------------------------------------
+
+  const getCategoryName = (categoryId) => {
     if (!categoryId) {
-      return "Uncategorized";
+      return "Not specified";
     }
 
     const category = categories.find(
@@ -253,141 +316,322 @@ function TicketDetails({ ticketId, onBack }) {
 
     return category
       ? category.name
-      : `Category ${categoryId}`;
-  }
+      : `Category #${categoryId}`;
+  };
 
-  function formatDate(dateString) {
-    if (!dateString) {
-      return "—";
+  // ----------------------------------------
+  // Date
+  // ----------------------------------------
+
+  const formatDate = (dateValue) => {
+    if (!dateValue) {
+      return "N/A";
     }
 
-    const date = new Date(dateString);
+    const date = parseBackendDate(dateValue);
 
-    if (Number.isNaN(date.getTime())) {
-      return dateString;
+    if (!date || Number.isNaN(date.getTime())) {
+      return String(dateValue);
     }
 
-    return date.toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
+    return date.toLocaleString();
+  };
 
-  function formatStatus(status) {
+  // ----------------------------------------
+  // Status
+  // ----------------------------------------
+
+  const formatStatus = (status) => {
     if (!status) {
-      return "—";
+      return "Unknown";
     }
 
-    return status.replaceAll("_", " ");
-  }
+    return status
+      .replaceAll("_", " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (letter) =>
+        letter.toUpperCase()
+      );
+  };
 
-  function formatFileSize(fileSize) {
-    if (fileSize === null || fileSize === undefined) {
-      return "—";
+  // ----------------------------------------
+  // File Size
+  // ----------------------------------------
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes <= 0) {
+      return "0 Bytes";
     }
 
-    if (fileSize < 1024) {
-      return `${fileSize} B`;
-    }
+    const sizes = [
+      "Bytes",
+      "KB",
+      "MB",
+      "GB",
+    ];
 
-    if (fileSize < 1024 * 1024) {
-      return `${(fileSize / 1024).toFixed(1)} KB`;
-    }
+    const index = Math.floor(
+      Math.log(bytes) / Math.log(1024)
+    );
 
     return `${(
-      fileSize /
-      (1024 * 1024)
-    ).toFixed(1)} MB`;
-  }
+      bytes / Math.pow(1024, index)
+    ).toFixed(2)} ${sizes[index]}`;
+  };
 
-  function formatConfidence(score) {
+  // ----------------------------------------
+  // AI Confidence
+  // ----------------------------------------
+
+  const formatConfidence = (score) => {
     if (
       score === null ||
       score === undefined
     ) {
-      return "—";
+      return "N/A";
     }
 
-    const numericScore = Number(score);
+    return `${(
+      Number(score) * 100
+    ).toFixed(0)}%`;
+  };
 
-    if (!Number.isFinite(numericScore)) {
-      return "—";
+  // ----------------------------------------
+  // Priority Class
+  // ----------------------------------------
+
+  const getPriorityClass = (priority) => {
+    switch (priority) {
+      case "CRITICAL":
+        return "priority-critical";
+
+      case "HIGH":
+        return "priority-high";
+
+      case "MEDIUM":
+        return "priority-medium";
+
+      case "LOW":
+        return "priority-low";
+
+      default:
+        return "";
+    }
+  };
+
+  // ----------------------------------------
+  // Status Class
+  // ----------------------------------------
+
+  const getStatusClass = (status) => {
+    switch (status) {
+      case "OPEN":
+        return "status-open";
+
+      case "ASSIGNED":
+        return "status-assigned";
+
+      case "IN_PROGRESS":
+        return "status-in-progress";
+
+      case "PENDING":
+        return "status-pending";
+
+      case "RESOLVED":
+        return "status-resolved";
+
+      case "CLOSED":
+        return "status-closed";
+
+      case "REOPENED":
+        return "status-reopened";
+
+      case "CANCELLED":
+        return "status-cancelled";
+
+      default:
+        return "";
+    }
+  };
+
+  // ----------------------------------------
+  // SLA Status
+  // ----------------------------------------
+
+  const getSLAStatusText = (
+    value,
+    deadline
+  ) => {
+    if (value === true) {
+      return "Met";
     }
 
-    const percentage =
-      numericScore <= 1
-        ? numericScore * 100
-        : numericScore;
-
-    return `${Math.min(
-      100,
-      Math.max(0, Math.round(percentage))
-    )}%`;
-  }
-
-  function getPriorityClass(priority) {
-    if (!priority) {
-      return "";
+    if (value === false) {
+      return "Breached";
     }
 
-    return `priority-${priority.toLowerCase()}`;
-  }
-
-  function getStatusClass(status) {
-    if (!status) {
-      return "";
+    if (!deadline) {
+      return "Pending";
     }
 
-    return `status-${status.toLowerCase()}`;
-  }
+    const deadlineDate =
+      parseBackendDate(deadline);
 
-  function handleFileChange(event) {
+    if (
+      !deadlineDate ||
+      Number.isNaN(deadlineDate.getTime())
+    ) {
+      return "Pending";
+    }
+
+    if (
+      currentTime.getTime() >=
+      deadlineDate.getTime()
+    ) {
+      return "Breached";
+    }
+
+    return "Pending";
+  };
+
+  const getSLAStatusClass = (
+    value,
+    deadline
+  ) => {
+    const status = getSLAStatusText(
+      value,
+      deadline
+    );
+
+    if (status === "Met") {
+      return "sla-status-met";
+    }
+
+    if (status === "Breached") {
+      return "sla-status-breached";
+    }
+
+    return "sla-status-pending";
+  };
+
+  // ----------------------------------------
+  // SLA Remaining Time
+  // ----------------------------------------
+
+  const getSLARemainingText = (
+    value,
+    deadline
+  ) => {
+    if (value === true) {
+      return "SLA completed";
+    }
+
+    if (!deadline) {
+      return "No deadline available";
+    }
+
+    const deadlineDate =
+      parseBackendDate(deadline);
+
+    if (
+      !deadlineDate ||
+      Number.isNaN(deadlineDate.getTime())
+    ) {
+      return "Invalid deadline";
+    }
+
+    const difference =
+      deadlineDate.getTime() -
+      currentTime.getTime();
+
+    if (difference <= 0) {
+      return "Deadline exceeded";
+    }
+
+    const totalMinutes = Math.floor(
+      difference / (1000 * 60)
+    );
+
+    const days = Math.floor(
+      totalMinutes / (60 * 24)
+    );
+
+    const hours = Math.floor(
+      (totalMinutes % (60 * 24)) / 60
+    );
+
+    const minutes =
+      totalMinutes % 60;
+
+    if (days > 0) {
+      return `${days}d ${hours}h remaining`;
+    }
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m remaining`;
+    }
+
+    return `${minutes}m remaining`;
+  };
+
+  // ----------------------------------------
+  // File Selection
+  // ----------------------------------------
+
+  const handleFileChange = (event) => {
     const file = event.target.files?.[0];
 
-    setAttachmentError("");
-    setSelectedFile(null);
-
     if (!file) {
+      setSelectedFile(null);
       return;
     }
 
-    const extension =
-      "." +
-      file.name
-        .split(".")
-        .pop()
-        .toLowerCase();
+    const fileName =
+      file.name.toLowerCase();
 
-    if (
-      !allowedExtensions.includes(
-        extension
-      )
-    ) {
+    const isAllowed =
+      allowedFileExtensions.some(
+        (extension) =>
+          fileName.endsWith(extension)
+      );
+
+    if (!isAllowed) {
       setAttachmentError(
-        "File type not allowed. Allowed types: PDF, PNG, JPG, JPEG, TXT, CSV, DOCX."
+        "File type is not allowed. Allowed types: PDF, PNG, JPG, JPEG, TXT, CSV, DOCX."
       );
 
       event.target.value = "";
+      setSelectedFile(null);
+
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
       setAttachmentError(
-        "File size cannot exceed 10 MB."
+        "File size must be 10 MB or less."
       );
 
       event.target.value = "";
+      setSelectedFile(null);
+
       return;
     }
 
+    setAttachmentError("");
     setSelectedFile(file);
-  }
+  };
 
-  async function handleFileUpload(event) {
-    event.preventDefault();
+  // ----------------------------------------
+  // Upload Attachment
+  // ----------------------------------------
+
+  const handleUpload = async () => {
+    if (!accessToken) {
+      setAttachmentError(
+        "Authentication token is missing. Please log in again."
+      );
+      return;
+    }
 
     if (!selectedFile) {
       setAttachmentError(
@@ -396,20 +640,10 @@ function TicketDetails({ ticketId, onBack }) {
       return;
     }
 
+    setUploadingFile(true);
+    setAttachmentError("");
+
     try {
-      setUploadingFile(true);
-      setAttachmentError("");
-
-      const accessToken =
-        localStorage.getItem("access_token") ||
-        sessionStorage.getItem("access_token");
-
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
       await uploadTicketAttachment(
         accessToken,
         ticketId,
@@ -422,172 +656,180 @@ function TicketDetails({ ticketId, onBack }) {
         fileInputRef.current.value = "";
       }
 
-      await loadAttachments(accessToken);
+      await loadAttachments();
     } catch (err) {
       setAttachmentError(
-        err.message ||
+        err?.message ||
           "Failed to upload attachment."
       );
     } finally {
       setUploadingFile(false);
     }
-  }
+  };
 
-  async function handleDownloadAttachment(
+  // ----------------------------------------
+  // Download Attachment
+  // ----------------------------------------
+
+  const handleDownloadAttachment = async (
     attachment
-  ) {
-    try {
-      setDownloadingAttachmentId(
-        attachment.id
+  ) => {
+    if (!accessToken) {
+      setAttachmentError(
+        "Authentication token is missing. Please log in again."
       );
+      return;
+    }
 
-      setAttachmentError("");
+    setDownloadingAttachmentId(
+      attachment.id
+    );
 
-      const accessToken =
-        localStorage.getItem("access_token") ||
-        sessionStorage.getItem("access_token");
+    setAttachmentError("");
 
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
+    try {
       await downloadTicketAttachment(
         accessToken,
         ticketId,
         attachment.id,
-        attachment.file_name
+        attachment.file_name ||
+          attachment.filename ||
+          "attachment"
       );
     } catch (err) {
       setAttachmentError(
-        err.message ||
+        err?.message ||
           "Failed to download attachment."
       );
     } finally {
       setDownloadingAttachmentId(null);
     }
-  }
+  };
 
-  async function handleCommentSubmit(event) {
+  // ----------------------------------------
+  // Comment Submit
+  // ----------------------------------------
+
+  const handleCommentSubmit = async (
+    event
+  ) => {
     event.preventDefault();
 
-    const trimmedComment =
-      commentText.trim();
-
-    if (!trimmedComment) {
+    if (!accessToken) {
       setCommentError(
-        "Please enter a comment."
+        "Authentication token is missing. Please log in again."
       );
       return;
     }
 
+    if (!commentText.trim()) {
+      setCommentError(
+        "Comment cannot be empty."
+      );
+      return;
+    }
+
+    setSubmittingComment(true);
+    setCommentError("");
+
     try {
-      setSubmittingComment(true);
-      setCommentError("");
-
-      const accessToken =
-        localStorage.getItem("access_token") ||
-        sessionStorage.getItem("access_token");
-
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
       await createTicketComment(
         accessToken,
         ticketId,
         {
-          comment: trimmedComment,
-          is_internal:
-            canUseInternalComments
-              ? isInternal
-              : false,
+          comment: commentText.trim(),
+          is_internal: canUseInternalComments
+            ? isInternal
+            : false,
         }
       );
 
       setCommentText("");
       setIsInternal(false);
 
-      await loadComments(accessToken);
+      await loadComments();
     } catch (err) {
       setCommentError(
-        err.message ||
+        err?.message ||
           "Failed to add comment."
       );
     } finally {
       setSubmittingComment(false);
     }
-  }
+  };
 
-  async function handleRatingSubmit(event) {
+  // ----------------------------------------
+  // Rating Submit
+  // ----------------------------------------
+
+  const handleRatingSubmit = async (
+    event
+  ) => {
     event.preventDefault();
 
-    if (!selectedRating) {
+    if (!accessToken) {
       setRatingError(
-        "Please select a rating from 1 to 5 stars."
+        "Authentication token is missing. Please log in again."
       );
       return;
     }
 
+    if (!selectedRating) {
+      setRatingError(
+        "Please select a rating."
+      );
+      return;
+    }
+
+    setSubmittingRating(true);
+    setRatingError("");
+    setRatingSuccess("");
+
     try {
-      setSubmittingRating(true);
-      setRatingError("");
-      setRatingSuccess("");
-
-      const accessToken =
-        localStorage.getItem("access_token") ||
-        sessionStorage.getItem("access_token");
-
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
       const updatedTicket =
         await rateTicket(
           accessToken,
           ticketId,
           {
             rating: selectedRating,
-            feedback: feedbackText,
+            feedback:
+              feedbackText.trim() ||
+              null,
           }
         );
 
       setTicket(updatedTicket);
 
       setRatingSuccess(
-        "Thank you for rating our support."
+        "Thank you. Your rating has been submitted."
       );
     } catch (err) {
       setRatingError(
-        err.message ||
-          "Failed to submit your rating."
+        err?.message ||
+          "Failed to submit rating."
       );
     } finally {
       setSubmittingRating(false);
     }
-  }
+  };
 
-  async function handleAIAnalysis() {
+  // ----------------------------------------
+  // AI Analysis
+  // ----------------------------------------
+
+  const handleAIAnalysis = async () => {
+    if (!accessToken) {
+      setAiError(
+        "Authentication token is missing. Please log in again."
+      );
+      return;
+    }
+
+    setAnalyzingAI(true);
+    setAiError("");
+    setAiSuccess("");
+
     try {
-      setAnalyzingAI(true);
-      setAiError("");
-      setAiSuccess("");
-
-      const accessToken =
-        localStorage.getItem("access_token") ||
-        sessionStorage.getItem("access_token");
-
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
-      }
-
       const result =
         await analyzeTicketWithAI(
           accessToken,
@@ -600,32 +842,155 @@ function TicketDetails({ ticketId, onBack }) {
         "AI analysis completed successfully."
       );
     } catch (err) {
-      setAiError(
-        err.message ||
-          "Failed to analyze this ticket with AI."
-      );
+      const errorMessage =
+        err?.message || "";
+
+      if (
+        errorMessage.includes("429") ||
+        errorMessage.includes("RESOURCE_EXHAUSTED") ||
+        errorMessage.toLowerCase().includes("quota")
+      ) {
+        setAiError(
+          "AI service quota reached. Please try again later."
+        );
+      } else {
+        setAiError(
+          errorMessage ||
+            "Failed to analyze the ticket with AI."
+        );
+      }
     } finally {
       setAnalyzingAI(false);
     }
-  }
+  };
 
-  async function handleStatusChange(
-    newStatus
-  ) {
-    try {
-      setUpdatingStatus(true);
-      setStatusError("");
+  // ----------------------------------------
+  // Status Actions
+  // ----------------------------------------
 
-      const accessToken =
-        localStorage.getItem("access_token") ||
-        sessionStorage.getItem("access_token");
+  const getStatusActions = () => {
+    if (!ticket || !user) {
+      return [];
+    }
 
-      if (!accessToken) {
-        throw new Error(
-          "Your session has expired. Please log in again."
-        );
+    const actions = [];
+
+    // Employee
+    if (user.role_id === 1) {
+      if (ticket.status === "RESOLVED") {
+        actions.push("CLOSED");
+        actions.push("REOPENED");
       }
 
+      if (ticket.status === "CLOSED") {
+        actions.push("REOPENED");
+      }
+
+      return actions;
+    }
+
+    // Support Engineer
+    if (user.role_id === 2) {
+      if (
+        ticket.status === "ASSIGNED" &&
+        ticket.assigned_to === user.user_id
+      ) {
+        actions.push("IN_PROGRESS");
+      }
+
+      if (
+        ticket.status === "IN_PROGRESS" &&
+        ticket.assigned_to === user.user_id
+      ) {
+        actions.push("PENDING");
+        actions.push("RESOLVED");
+      }
+
+      if (
+        ticket.status === "PENDING" &&
+        ticket.assigned_to === user.user_id
+      ) {
+        actions.push("IN_PROGRESS");
+      }
+
+      if (
+        ticket.status === "REOPENED" &&
+        ticket.assigned_to === user.user_id
+      ) {
+        actions.push("IN_PROGRESS");
+      }
+
+      return actions;
+    }
+
+    // Administrator
+    if (user.role_id === 3) {
+      switch (ticket.status) {
+        case "OPEN":
+          actions.push("CANCELLED");
+          break;
+
+        case "ASSIGNED":
+          actions.push("IN_PROGRESS");
+          actions.push("CANCELLED");
+          break;
+
+        case "IN_PROGRESS":
+          actions.push("PENDING");
+          actions.push("RESOLVED");
+          actions.push("CANCELLED");
+          break;
+
+        case "PENDING":
+          actions.push("IN_PROGRESS");
+          actions.push("CANCELLED");
+          break;
+
+        case "RESOLVED":
+          actions.push("CLOSED");
+          actions.push("REOPENED");
+          break;
+
+        case "CLOSED":
+          actions.push("REOPENED");
+          break;
+
+        case "REOPENED":
+          actions.push("ASSIGNED");
+          actions.push("IN_PROGRESS");
+          actions.push("CANCELLED");
+          break;
+
+        case "CANCELLED":
+          actions.push("REOPENED");
+          break;
+
+        default:
+          break;
+      }
+    }
+
+    return actions;
+  };
+
+  // ----------------------------------------
+  // Status Change
+  // ----------------------------------------
+
+  const handleStatusChange = async (
+    newStatus
+  ) => {
+    if (!accessToken) {
+      setStatusError(
+        "Authentication token is missing. Please log in again."
+      );
+      return;
+    }
+
+    setUpdatingStatus(true);
+    setStatusError("");
+
+    try {
       const updatedTicket =
         await updateTicketStatus(
           accessToken,
@@ -635,334 +1000,150 @@ function TicketDetails({ ticketId, onBack }) {
 
       setTicket(updatedTicket);
 
-      alert(
-        `Ticket status changed to ${formatStatus(
-          updatedTicket.status
-        )}.`
-      );
+      if (
+        newStatus === "RESOLVED" ||
+        newStatus === "CLOSED"
+      ) {
+        setRatingSuccess("");
+        setRatingError("");
+      }
     } catch (err) {
       setStatusError(
-        err.message ||
+        err?.message ||
           "Failed to update ticket status."
       );
     } finally {
       setUpdatingStatus(false);
     }
-  }
+  };
 
-  function handleAssignmentComplete(
-    updatedTicket
-  ) {
-    setShowAssignment(false);
-    setTicket(updatedTicket);
-  }
+  // ----------------------------------------
+  // Assignment Complete
+  // ----------------------------------------
 
-  function getStatusActions() {
-    if (!ticket) {
-      return [];
-    }
+  const handleAssignmentComplete =
+    async () => {
+      setShowAssignment(false);
 
-    /* EMPLOYEE */
-
-    if (user.role_id === 1) {
-      if (
-        ticket.status === "OPEN" ||
-        ticket.status === "ASSIGNED" ||
-        ticket.status === "IN_PROGRESS" ||
-        ticket.status === "PENDING"
-      ) {
-        return [
-          {
-            status: "CANCELLED",
-            label: "Cancel Ticket",
-          },
-        ];
+      if (!accessToken) {
+        return;
       }
 
-      if (
-        ticket.status === "RESOLVED" ||
-        ticket.status === "CLOSED" ||
-        ticket.status === "CANCELLED"
-      ) {
-        return [
-          {
-            status: "REOPENED",
-            label: "Reopen Ticket",
-          },
-        ];
+      try {
+        const updatedTicket =
+          await getTicket(
+            accessToken,
+            ticketId
+          );
+
+        setTicket(updatedTicket);
+      } catch (err) {
+        setError(
+          err?.message ||
+            "Failed to refresh ticket."
+        );
       }
-    }
+    };
 
-    /* SUPPORT ENGINEER */
-
-    if (user.role_id === 2) {
-      if (ticket.status === "ASSIGNED") {
-        return [
-          {
-            status: "IN_PROGRESS",
-            label: "Start Working",
-          },
-        ];
-      }
-
-      if (ticket.status === "IN_PROGRESS") {
-        return [
-          {
-            status: "PENDING",
-            label: "Set Pending",
-          },
-          {
-            status: "RESOLVED",
-            label: "Resolve Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "PENDING") {
-        return [
-          {
-            status: "IN_PROGRESS",
-            label: "Resume Work",
-          },
-        ];
-      }
-
-      if (
-        ticket.status === "RESOLVED" ||
-        ticket.status === "CLOSED"
-      ) {
-        return [
-          {
-            status: "REOPENED",
-            label: "Reopen Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "REOPENED") {
-        return [
-          {
-            status: "IN_PROGRESS",
-            label: "Start Working Again",
-          },
-        ];
-      }
-    }
-
-    /* ADMINISTRATOR */
-
-    if (user.role_id === 3) {
-      if (ticket.status === "OPEN") {
-        return [
-          {
-            status: "CANCELLED",
-            label: "Cancel Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "ASSIGNED") {
-        return [
-          {
-            status: "IN_PROGRESS",
-            label: "Start Working",
-          },
-          {
-            status: "CANCELLED",
-            label: "Cancel Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "IN_PROGRESS") {
-        return [
-          {
-            status: "PENDING",
-            label: "Set Pending",
-          },
-          {
-            status: "RESOLVED",
-            label: "Resolve Ticket",
-          },
-          {
-            status: "CANCELLED",
-            label: "Cancel Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "PENDING") {
-        return [
-          {
-            status: "IN_PROGRESS",
-            label: "Resume Work",
-          },
-          {
-            status: "CANCELLED",
-            label: "Cancel Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "RESOLVED") {
-        return [
-          {
-            status: "CLOSED",
-            label: "Close Ticket",
-          },
-          {
-            status: "REOPENED",
-            label: "Reopen Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "CLOSED") {
-        return [
-          {
-            status: "REOPENED",
-            label: "Reopen Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "REOPENED") {
-        return [
-          {
-            status: "ASSIGNED",
-            label: "Assign Again",
-          },
-          {
-            status: "IN_PROGRESS",
-            label: "Start Working",
-          },
-          {
-            status: "CANCELLED",
-            label: "Cancel Ticket",
-          },
-        ];
-      }
-
-      if (ticket.status === "CANCELLED") {
-        return [
-          {
-            status: "REOPENED",
-            label: "Reopen Ticket",
-          },
-        ];
-      }
-    }
-
-    return [];
-  }
+  // ----------------------------------------
+  // Loading
+  // ----------------------------------------
 
   if (loading) {
     return (
-      <main className="ticket-details-page">
-        <div className="ticket-card">
-          <div className="loading-state">
-            Loading ticket details...
-          </div>
+      <div className="ticket-details-page">
+        <div className="ticket-details-loading">
+          Loading ticket details...
         </div>
-      </main>
+      </div>
     );
   }
+
+  // ----------------------------------------
+  // Error
+  // ----------------------------------------
 
   if (error) {
     return (
-      <main className="ticket-details-page">
-        <div className="ticket-page-header">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={onBack}
-          >
-            ← Back to Dashboard
-          </button>
-
-          <div>
-            <h1>Ticket Details</h1>
-            <p>
-              Unable to load this support request.
-            </p>
-          </div>
+      <div className="ticket-details-page">
+        <div className="ticket-details-error">
+          {error}
         </div>
-
-        <section className="ticket-card">
-          <div className="error-message">
-            {error}
-          </div>
-
-          <div className="empty-state">
-            <button
-              type="button"
-              className="primary-button"
-              onClick={onBack}
-            >
-              Back to Dashboard
-            </button>
-          </div>
-        </section>
-      </main>
+      </div>
     );
   }
 
-  if (!ticket) {
-    return null;
-  }
+  // ----------------------------------------
+  // Ticket Not Found
+  // ----------------------------------------
 
-  if (
-    showAssignment &&
-    user.role_id === 3
-  ) {
+  if (!ticket) {
     return (
-      <AdminAssignment
-        ticketId={ticketId}
-        onBack={() =>
-          setShowAssignment(false)
-        }
-        onAssigned={
-          handleAssignmentComplete
-        }
-      />
+      <div className="ticket-details-page">
+        <div className="ticket-details-error">
+          Ticket not found.
+        </div>
+      </div>
     );
   }
 
   const statusActions =
     getStatusActions();
 
+  const responseSLAStatus =
+    getSLAStatusText(
+      ticket.sla_response_met,
+      ticket.sla_response_deadline
+    );
+
+  const resolutionSLAStatus =
+    getSLAStatusText(
+      ticket.sla_resolution_met,
+      ticket.sla_resolution_deadline
+    );
+
   return (
-    <main className="ticket-details-page">
-      <div className="ticket-page-header">
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={onBack}
+    <div className="ticket-details-page">
+      <div className="ticket-details-container">
+
+        {/* Back to Dashboard */}
+
+        <div
+          style={{
+            marginBottom: "20px",
+          }}
         >
-          ← Back to Dashboard
-        </button>
-
-        <div>
-          <h1>Ticket Details</h1>
-          <p>
-            View, manage, and track this support request.
-          </p>
+          <button
+            type="button"
+            onClick={handleBackToDashboard}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: "0",
+              fontSize: "16px",
+              fontWeight: "600",
+              cursor: "pointer",
+              color: "inherit",
+            }}
+          >
+            ← Dashboard
+          </button>
         </div>
-      </div>
 
-      {/* Ticket Summary */}
+        {/* Header */}
 
-      <section className="ticket-card ticket-summary-card">
-        <div className="ticket-summary-header">
+        <div className="ticket-details-header">
           <div>
-            <span className="ticket-number">
-              {ticket.ticket_number}
-            </span>
+            <h1>
+              Ticket #{ticket.id}
+            </h1>
 
-            <h2>{ticket.title}</h2>
+            <p className="ticket-details-title">
+              {ticket.title}
+            </p>
           </div>
 
-          <div className="ticket-summary-badges">
+          <div className="ticket-header-badges">
             <span
               className={`status-badge ${getStatusClass(
                 ticket.status
@@ -976,14 +1157,16 @@ function TicketDetails({ ticketId, onBack }) {
                 ticket.priority
               )}`}
             >
-              {ticket.priority}
+              {ticket.priority || "N/A"}
             </span>
           </div>
         </div>
 
+        {/* Ticket Summary */}
+
         <div className="ticket-summary-grid">
-          <div className="ticket-summary-item">
-            <span className="ticket-summary-label">
+          <div className="ticket-summary-card">
+            <span>
               Category
             </span>
 
@@ -994,18 +1177,32 @@ function TicketDetails({ ticketId, onBack }) {
             </strong>
           </div>
 
-          <div className="ticket-summary-item">
-            <span className="ticket-summary-label">
-              Created By
+          <div className="ticket-summary-card">
+            <span>
+              Created
             </span>
 
             <strong>
-              User #{ticket.created_by}
+              {formatDate(
+                ticket.created_at
+              )}
             </strong>
           </div>
 
-          <div className="ticket-summary-item">
-            <span className="ticket-summary-label">
+          <div className="ticket-summary-card">
+            <span>
+              Updated
+            </span>
+
+            <strong>
+              {formatDate(
+                ticket.updated_at
+              )}
+            </strong>
+          </div>
+
+          <div className="ticket-summary-card">
+            <span>
               Assigned To
             </span>
 
@@ -1015,168 +1212,251 @@ function TicketDetails({ ticketId, onBack }) {
                 : "Unassigned"}
             </strong>
           </div>
-
-          <div className="ticket-summary-item">
-            <span className="ticket-summary-label">
-              Support Team
-            </span>
-
-            <strong>
-              {ticket.team_id
-                ? `Team #${ticket.team_id}`
-                : "Not assigned"}
-            </strong>
-          </div>
         </div>
-      </section>
 
-      {/* Admin Assignment */}
+        {/* SLA Information */}
 
-      {user.role_id === 3 && (
-        <section className="ticket-card">
-          <div className="ticket-card-header">
+        <div className="ticket-section sla-section">
+          <div className="ticket-section-header">
             <div>
-              <h2>Ticket Assignment</h2>
+              <h2>
+                SLA Information
+              </h2>
 
               <p>
-                Assign this ticket to a support engineer and team.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() =>
-                setShowAssignment(true)
-              }
-            >
-              Assign Ticket
-            </button>
-          </div>
-        </section>
-      )}
-
-      {/* Status Actions */}
-
-      {statusActions.length > 0 && (
-        <section className="ticket-card">
-          <div className="ticket-card-header">
-            <div>
-              <h2>Ticket Actions</h2>
-
-              <p>
-                Available actions for your role.
+                Service Level Agreement deadlines
+                and compliance status for this ticket.
               </p>
             </div>
           </div>
 
-          <div className="ticket-action-row">
-            {statusActions.map((action) => (
-              <button
-                key={action.status}
-                type="button"
-                className="primary-button"
-                onClick={() =>
-                  handleStatusChange(
-                    action.status
-                  )
-                }
-                disabled={updatingStatus}
-              >
-                {updatingStatus
-                  ? "Updating..."
-                  : action.label}
-              </button>
-            ))}
-          </div>
+          <div className="ticket-summary-grid">
 
-          {statusError && (
-            <div className="error-message">
-              {statusError}
-            </div>
-          )}
-        </section>
-      )}
+            {/* Response Deadline */}
 
-      {/* Issue Description */}
-
-      <section className="ticket-card">
-        <div className="ticket-card-header">
-          <div>
-            <h2>Issue Description</h2>
-
-            <p>
-              Details provided when the ticket was created.
-            </p>
-          </div>
-        </div>
-
-        <div className="ticket-description">
-          {ticket.description}
-        </div>
-      </section>
-
-      {/* AI Analysis */}
-
-      {canShowAIAnalysis && (
-        <section className="ticket-card ticket-ai-card">
-          <div className="ai-card-header">
-            <div>
-              <span className="ai-card-kicker">
-                AI ASSISTANT
+            <div className="ticket-summary-card">
+              <span>
+                Response Deadline
               </span>
 
-              <h2>AI Analysis</h2>
+              <strong>
+                {formatDate(
+                  ticket.sla_response_deadline
+                )}
+              </strong>
 
-              <p>
-                AI-generated insights to help understand and troubleshoot this ticket.
-              </p>
+              <small>
+                {getSLARemainingText(
+                  ticket.sla_response_met,
+                  ticket.sla_response_deadline
+                )}
+              </small>
             </div>
 
-            <button
-              type="button"
-              className="primary-button ai-analyze-button"
-              onClick={handleAIAnalysis}
-              disabled={analyzingAI}
-            >
-              {analyzingAI
-                ? "Analyzing..."
-                : aiAnalysis
-                  ? "Analyze Again"
-                  : "Analyze Ticket"}
-            </button>
+            {/* Resolution Deadline */}
+
+            <div className="ticket-summary-card">
+              <span>
+                Resolution Deadline
+              </span>
+
+              <strong>
+                {formatDate(
+                  ticket.sla_resolution_deadline
+                )}
+              </strong>
+
+              <small>
+                {getSLARemainingText(
+                  ticket.sla_resolution_met,
+                  ticket.sla_resolution_deadline
+                )}
+              </small>
+            </div>
+
+            {/* Response SLA */}
+
+            <div className="ticket-summary-card">
+              <span>
+                Response SLA
+              </span>
+
+              <strong
+                className={getSLAStatusClass(
+                  ticket.sla_response_met,
+                  ticket.sla_response_deadline
+                )}
+              >
+                {responseSLAStatus}
+              </strong>
+            </div>
+
+            {/* Resolution SLA */}
+
+            <div className="ticket-summary-card">
+              <span>
+                Resolution SLA
+              </span>
+
+              <strong
+                className={getSLAStatusClass(
+                  ticket.sla_resolution_met,
+                  ticket.sla_resolution_deadline
+                )}
+              >
+                {resolutionSLAStatus}
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        {/* Admin Assignment */}
+
+        {user?.role_id === 3 && (
+          <div className="ticket-section">
+            <div className="ticket-section-header">
+              <div>
+                <h2>
+                  Assignment
+                </h2>
+
+                <p>
+                  Assign this ticket to a
+                  support engineer.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() =>
+                  setShowAssignment(
+                    (current) => !current
+                  )
+                }
+              >
+                {showAssignment
+                  ? "Hide Assignment"
+                  : "Manage Assignment"}
+              </button>
+            </div>
+
+            {showAssignment && (
+              <AdminAssignment
+                ticket={ticket}
+                onAssignmentComplete={
+                  handleAssignmentComplete
+                }
+              />
+            )}
+          </div>
+        )}
+
+        {/* Status Actions */}
+
+        {statusActions.length > 0 && (
+          <div className="ticket-section">
+            <div className="ticket-section-header">
+              <div>
+                <h2>
+                  Status Actions
+                </h2>
+
+                <p>
+                  Update the current ticket
+                  status.
+                </p>
+              </div>
+            </div>
+
+            <div className="status-actions">
+              {statusActions.map(
+                (status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className="secondary-button"
+                    disabled={updatingStatus}
+                    onClick={() =>
+                      handleStatusChange(
+                        status
+                      )
+                    }
+                  >
+                    {updatingStatus
+                      ? "Updating..."
+                      : `Mark ${formatStatus(
+                          status
+                        )}`}
+                  </button>
+                )
+              )}
+            </div>
+
+            {statusError && (
+              <div className="inline-error">
+                {statusError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Issue Description */}
+
+        <div className="ticket-section">
+          <div className="ticket-section-header">
+            <div>
+              <h2>
+                Issue Description
+              </h2>
+            </div>
           </div>
 
-          <div className="ticket-ai-content">
+          <div className="ticket-description">
+            {ticket.description}
+          </div>
+        </div>
+
+        {/* AI Analysis */}
+
+        {canShowAIAnalysis && (
+          <div className="ticket-section ai-analysis-section">
+            <div className="ticket-section-header">
+              <div>
+                <h2>
+                  AI Analysis
+                </h2>
+
+                <p>
+                  AI-generated classification,
+                  sentiment, summary, and
+                  troubleshooting recommendations.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="primary-button"
+                disabled={analyzingAI}
+                onClick={handleAIAnalysis}
+              >
+                {analyzingAI
+                  ? "Analyzing..."
+                  : aiAnalysis
+                  ? "Analyze Again"
+                  : "Analyze Ticket"}
+              </button>
+            </div>
+
             {aiError && (
-              <div className="ai-analysis-error">
-                <div className="ai-status-icon">
-                  !
-                </div>
-
-                <div>
-                  <strong>
-                    AI analysis unavailable
-                  </strong>
-
-                  <p>{aiError}</p>
-                </div>
+              <div className="inline-error">
+                {aiError}
               </div>
             )}
 
-            {aiSuccess && !aiError && (
-              <div className="ai-analysis-success">
-                <div className="ai-status-icon">
-                  ✓
-                </div>
-
-                <div>
-                  <strong>
-                    Analysis ready
-                  </strong>
-
-                  <p>{aiSuccess}</p>
-                </div>
+            {aiSuccess && (
+              <div className="inline-success">
+                {aiSuccess}
               </div>
             )}
 
@@ -1184,84 +1464,87 @@ function TicketDetails({ ticketId, onBack }) {
               !analyzingAI &&
               !aiError && (
                 <div className="ai-empty-state">
-                  <div className="ai-empty-icon">
-                    AI
-                  </div>
-
-                  <h3>
-                    No AI analysis yet
-                  </h3>
+                  <p>
+                    Click “Analyze Ticket” to
+                    generate an AI-assisted
+                    analysis.
+                  </p>
 
                   <p>
-                    Run AI analysis to get category,
-                    priority, sentiment, summary,
-                    and troubleshooting recommendations.
+                    AI recommendations are
+                    advisory and should be
+                    reviewed by a human support
+                    engineer.
                   </p>
                 </div>
               )}
 
             {analyzingAI && (
-              <div className="ai-loading-indicator">
-                Analyzing ticket information...
+              <div className="ai-loading-state">
+                <p>
+                  Gemini is analyzing the
+                  ticket and checking relevant
+                  Knowledge Base articles...
+                </p>
               </div>
             )}
 
-            {aiAnalysis && !analyzingAI && (
-              <div className="ai-analysis-result">
-                <div className="ai-metadata-grid">
-                  <div className="ai-metadata-item">
-                    <span className="ai-metadata-label">
-                      Category
-                    </span>
+            {aiAnalysis &&
+              !analyzingAI && (
+                <div className="ai-analysis-result">
 
-                    <span className="ai-metadata-value">
-                      {aiAnalysis.category || "—"}
-                    </span>
-                  </div>
+                  <div className="ai-analysis-grid">
 
-                  <div className="ai-metadata-item">
-                    <span className="ai-metadata-label">
-                      Subcategory
-                    </span>
+                    <div className="ai-analysis-card">
+                      <span>
+                        Category
+                      </span>
 
-                    <span className="ai-metadata-value">
-                      {aiAnalysis.subcategory || "—"}
-                    </span>
-                  </div>
+                      <strong>
+                        {aiAnalysis.category ||
+                          "N/A"}
+                      </strong>
+                    </div>
 
-                  <div className="ai-metadata-item">
-                    <span className="ai-metadata-label">
-                      Priority
-                    </span>
+                    <div className="ai-analysis-card">
+                      <span>
+                        Subcategory
+                      </span>
 
-                    <span
-                      className={`ai-priority-badge ${getPriorityClass(
-                        aiAnalysis.priority
-                      )}`}
-                    >
-                      {aiAnalysis.priority || "—"}
-                    </span>
-                  </div>
+                      <strong>
+                        {aiAnalysis.subcategory ||
+                          "N/A"}
+                      </strong>
+                    </div>
 
-                  <div className="ai-metadata-item">
-                    <span className="ai-metadata-label">
-                      Sentiment
-                    </span>
+                    <div className="ai-analysis-card">
+                      <span>
+                        Priority
+                      </span>
 
-                    <span
-                      className={`ai-sentiment-badge ${
-                        aiAnalysis.sentiment
-                          ? `sentiment-${aiAnalysis.sentiment.toLowerCase()}`
-                          : ""
-                      }`}
-                    >
-                      {aiAnalysis.sentiment || "—"}
-                    </span>
-                  </div>
+                      <strong
+                        className={getPriorityClass(
+                          aiAnalysis.priority
+                        )}
+                      >
+                        {aiAnalysis.priority ||
+                          "N/A"}
+                      </strong>
+                    </div>
 
-                  <div className="ai-metadata-item ai-confidence">
-                    <div className="ai-confidence-top">
-                      <span className="ai-metadata-label">
+                    <div className="ai-analysis-card">
+                      <span>
+                        Sentiment
+                      </span>
+
+                      <strong>
+                        {aiAnalysis.sentiment ||
+                          "N/A"}
+                      </strong>
+                    </div>
+
+                    <div className="ai-analysis-card">
+                      <span>
                         Confidence
                       </span>
 
@@ -1272,509 +1555,525 @@ function TicketDetails({ ticketId, onBack }) {
                       </strong>
                     </div>
 
-                    <div className="ai-confidence-track">
-                      <div
-                        className="ai-confidence-fill"
-                        style={{
-                          width: `${(() => {
-                            const value =
-                              Number(
-                                aiAnalysis.confidence_score
-                              );
+                    <div className="ai-analysis-card">
+                      <span>
+                        Model
+                      </span>
 
-                            if (
-                              !Number.isFinite(value)
-                            ) {
-                              return 0;
-                            }
-
-                            const percentage =
-                              value <= 1
-                                ? value * 100
-                                : value;
-
-                            return Math.min(
-                              100,
-                              Math.max(
-                                0,
-                                percentage
-                              )
-                            );
-                          })()}%`,
-                        }}
-                      />
+                      <strong>
+                        {aiAnalysis.model_name ||
+                          "N/A"}
+                      </strong>
                     </div>
                   </div>
 
-                  <div className="ai-metadata-item">
-                    <span className="ai-metadata-label">
-                      Model
-                    </span>
+                  <div className="ai-text-section">
+                    <h3>
+                      Summary
+                    </h3>
 
-                    <span className="ai-metadata-value ai-model-value">
-                      {aiAnalysis.model_name || "—"}
-                    </span>
+                    <p>
+                      {aiAnalysis.summary ||
+                        "No summary available."}
+                    </p>
+                  </div>
+
+                  <div className="ai-text-section">
+                    <h3>
+                      Recommendation
+                    </h3>
+
+                    <p>
+                      {aiAnalysis.recommendation ||
+                        "No recommendation available."}
+                    </p>
+                  </div>
+
+                  <div className="ai-text-section">
+                    <h3>
+                      Knowledge Base Articles Used
+                    </h3>
+
+                    {Array.isArray(
+                      aiAnalysis.knowledge_base_articles
+                    ) &&
+                    aiAnalysis
+                      .knowledge_base_articles
+                      .length > 0 ? (
+                      <div className="ai-kb-list">
+                        {aiAnalysis
+                          .knowledge_base_articles
+                          .map(
+                            (article) => (
+                              <div
+                                className="ai-kb-item"
+                                key={article.id}
+                              >
+                                <span className="ai-kb-id">
+                                  KB #{article.id}
+                                </span>
+
+                                <strong className="ai-kb-title">
+                                  {article.title}
+                                </strong>
+                              </div>
+                            )
+                          )}
+                      </div>
+                    ) : (
+                      <p>
+                        No Knowledge Base articles
+                        were used for this analysis.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="ai-disclaimer">
+                    AI-generated information is
+                    advisory only. Support engineers
+                    should verify the recommendation
+                    before taking action.
                   </div>
                 </div>
-
-                <div className="ai-text-section">
-                  <h3 className="ai-section-heading">
-                    <span className="ai-section-marker" />
-                    Summary
-                  </h3>
-
-                  <p>
-                    {aiAnalysis.summary ||
-                      "No summary provided."}
-                  </p>
-                </div>
-
-                <div className="ai-text-section">
-                  <h3 className="ai-section-heading">
-                    <span className="ai-section-marker" />
-                    Recommendation
-                  </h3>
-
-                  <p>
-                    {aiAnalysis.recommendation ||
-                      "No recommendation provided."}
-                  </p>
-                </div>
-
-                <div className="ai-disclaimer">
-                  <strong>
-                    AI-assisted guidance
-                  </strong>
-
-                  <span>
-                    Review the recommendation before
-                    taking action. AI output is advisory
-                    and should not replace human support
-                    judgment.
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Employee Rating */}
-
-      {canRateTicket && (
-        <section className="ticket-card">
-          <div className="ticket-card-header">
-            <div>
-              <h2>Rate Support</h2>
-
-              <p>
-                Share your experience with the support team.
-              </p>
-            </div>
-          </div>
-
-          {hasExistingRating ? (
-            <div className="rating-submitted">
-              <div className="rating-display">
-                <span className="rating-score">
-                  {ticket.rating}/5
-                </span>
-
-                <span>
-                  Support rating submitted
-                </span>
-              </div>
-
-              {ticket.feedback && (
-                <p>
-                  {ticket.feedback}
-                </p>
               )}
-            </div>
-          ) : (
-            <form
-              className="rating-form"
-              onSubmit={handleRatingSubmit}
-            >
-              <label
-                className="form-label"
-                htmlFor="ticket-rating"
-              >
-                How would you rate the support you received?
-              </label>
-
-              <div className="rating-star-selector">
-                {[1, 2, 3, 4, 5].map(
-                  (star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      className={
-                        star <= selectedRating
-                          ? "rating-star-button selected"
-                          : "rating-star-button"
-                      }
-                      onClick={() =>
-                        setSelectedRating(star)
-                      }
-                      aria-label={`${star} star${
-                        star > 1 ? "s" : ""
-                      }`}
-                    >
-                      ★
-                    </button>
-                  )
-                )}
-              </div>
-
-              <textarea
-                className="form-control"
-                value={feedbackText}
-                onChange={(event) =>
-                  setFeedbackText(
-                    event.target.value
-                  )
-                }
-                placeholder="Tell us about your support experience (optional)"
-                maxLength={2000}
-                rows={4}
-                disabled={submittingRating}
-              />
-
-              {ratingError && (
-                <div className="error-message">
-                  {ratingError}
-                </div>
-              )}
-
-              {ratingSuccess && (
-                <div className="info-message">
-                  {ratingSuccess}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={
-                  submittingRating ||
-                  !selectedRating
-                }
-              >
-                {submittingRating
-                  ? "Submitting..."
-                  : "Submit Rating"}
-              </button>
-            </form>
-          )}
-        </section>
-      )}
-
-      {/* Activity */}
-
-      <section className="ticket-card">
-        <div className="ticket-card-header">
-          <div>
-            <h2>Activity</h2>
-
-            <p>
-              Comments and updates related to this ticket.
-            </p>
-          </div>
-        </div>
-
-        {loadingComments ? (
-          <div className="loading-state">
-            Loading activity...
-          </div>
-        ) : commentError ? (
-          <div className="error-message">
-            {commentError}
-          </div>
-        ) : comments.length === 0 ? (
-          <div className="empty-state">
-            No activity yet.
-          </div>
-        ) : (
-          <div className="comment-list">
-            {comments.map((comment) => (
-              <article
-                className="comment-item"
-                key={comment.id}
-              >
-                <div className="comment-header">
-                  <strong>
-                    User #
-                    {comment.user_id}
-                  </strong>
-
-                  <span>
-                    {formatDate(
-                      comment.created_at
-                    )}
-                  </span>
-                </div>
-
-                {comment.is_internal && (
-                  <span className="internal-comment-badge">
-                    Internal
-                  </span>
-                )}
-
-                <p>
-                  {comment.comment}
-                </p>
-              </article>
-            ))}
           </div>
         )}
 
-        <form
-          className="comment-form"
-          onSubmit={handleCommentSubmit}
-        >
-          <label
-            className="form-label"
-            htmlFor="ticket-comment"
-          >
-            Add a comment
-          </label>
+        {/* Rating */}
 
-          <textarea
-            id="ticket-comment"
-            className="form-control"
-            value={commentText}
-            onChange={(event) =>
-              setCommentText(
-                event.target.value
-              )
-            }
-            placeholder="Write a comment..."
-            maxLength={5000}
-            rows={5}
-            disabled={submittingComment}
-          />
+        {canRateTicket && (
+          <div className="ticket-section">
+            <div className="ticket-section-header">
+              <div>
+                <h2>
+                  Rate Support
+                </h2>
 
-          {canUseInternalComments && (
-            <label className="checkbox-label">
-              <input
-                type="checkbox"
-                checked={isInternal}
-                onChange={(event) =>
-                  setIsInternal(
-                    event.target.checked
-                  )
+                <p>
+                  Tell us about your support
+                  experience.
+                </p>
+              </div>
+            </div>
+
+            {hasExistingRating ? (
+              <div className="rating-display">
+                <div>
+                  <strong>
+                    Your Rating
+                  </strong>
+
+                  <div className="rating-stars">
+                    {"★".repeat(
+                      ticket.rating
+                    )}
+
+                    {"☆".repeat(
+                      5 - ticket.rating
+                    )}
+                  </div>
+                </div>
+
+                {ticket.feedback && (
+                  <div className="rating-feedback">
+                    <strong>
+                      Feedback
+                    </strong>
+
+                    <p>
+                      {ticket.feedback}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <form
+                className="rating-form"
+                onSubmit={
+                  handleRatingSubmit
                 }
-                disabled={submittingComment}
-              />
+              >
+                <div className="rating-options">
+                  {[1, 2, 3, 4, 5].map(
+                    (rating) => (
+                      <button
+                        key={rating}
+                        type="button"
+                        className={
+                          selectedRating === rating
+                            ? "rating-star selected"
+                            : "rating-star"
+                        }
+                        onClick={() =>
+                          setSelectedRating(
+                            rating
+                          )
+                        }
+                      >
+                        ★
+                      </button>
+                    )
+                  )}
+                </div>
 
-              <span>
-                Internal comment
-              </span>
-            </label>
-          )}
+                <textarea
+                  value={feedbackText}
+                  onChange={(event) =>
+                    setFeedbackText(
+                      event.target.value
+                    )
+                  }
+                  placeholder="Optional feedback"
+                  rows={4}
+                />
+
+                {ratingError && (
+                  <div className="inline-error">
+                    {ratingError}
+                  </div>
+                )}
+
+                {ratingSuccess && (
+                  <div className="inline-success">
+                    {ratingSuccess}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={submittingRating}
+                >
+                  {submittingRating
+                    ? "Submitting..."
+                    : "Submit Rating"}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* Activity & Comments */}
+
+        <div className="ticket-section">
+          <div className="ticket-section-header">
+            <div>
+              <h2>
+                Activity & Comments
+              </h2>
+            </div>
+          </div>
 
           {commentError && (
-            <div className="error-message">
+            <div className="inline-error">
               {commentError}
             </div>
           )}
 
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={
-              submittingComment ||
-              !commentText.trim()
+          {loadingComments ? (
+            <div className="ticket-loading-small">
+              Loading comments...
+            </div>
+          ) : comments.length === 0 ? (
+            <div className="ticket-empty-state">
+              No comments yet.
+            </div>
+          ) : (
+            <div className="comments-list">
+              {comments.map(
+                (comment) => (
+                  <div
+                    className="comment-item"
+                    key={comment.id}
+                  >
+                    <div className="comment-header">
+                      <strong>
+                        {comment.user_name ||
+                          `User #${comment.user_id}`}
+                      </strong>
+
+                      {comment.is_internal && (
+                        <span className="internal-comment-badge">
+                          Internal
+                        </span>
+                      )}
+
+                      <span>
+                        {formatDate(
+                          comment.created_at
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="comment-body">
+                      {comment.comment}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
+          <form
+            className="comment-form"
+            onSubmit={
+              handleCommentSubmit
             }
           >
-            {submittingComment
-              ? "Adding..."
-              : "Add Comment"}
-          </button>
-        </form>
-      </section>
+            <textarea
+              value={commentText}
+              onChange={(event) =>
+                setCommentText(
+                  event.target.value
+                )
+              }
+              placeholder="Write a comment..."
+              rows={4}
+            />
 
-      {/* Attachments */}
-
-      <section className="ticket-card">
-        <div className="ticket-card-header">
-          <div>
-            <h2>Attachments</h2>
-
-            <p>
-              Upload screenshots and files related to this ticket.
-            </p>
-          </div>
-        </div>
-
-        {loadingAttachments ? (
-          <div className="loading-state">
-            Loading attachments...
-          </div>
-        ) : attachmentError &&
-          attachments.length === 0 ? (
-          <div className="error-message">
-            {attachmentError}
-          </div>
-        ) : attachments.length === 0 ? (
-          <div className="empty-state">
-            No attachments yet.
-          </div>
-        ) : (
-          <div className="attachment-list">
-            {attachments.map((attachment) => (
-              <div
-                className="attachment-item"
-                key={attachment.id}
-              >
-                <div>
-                  <strong>
-                    {attachment.file_name}
-                  </strong>
-
-                  <span>
-                    {formatFileSize(
-                      attachment.file_size
-                    )}{" "}
-                    · Uploaded by User #
-                    {attachment.uploaded_by}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() =>
-                    handleDownloadAttachment(
-                      attachment
+            {canUseInternalComments && (
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={isInternal}
+                  onChange={(event) =>
+                    setIsInternal(
+                      event.target.checked
                     )
                   }
-                  disabled={
-                    downloadingAttachmentId ===
-                    attachment.id
-                  }
-                >
-                  {downloadingAttachmentId ===
-                  attachment.id
-                    ? "Downloading..."
-                    : "Download"}
-                </button>
-              </div>
-            ))}
+                />
+
+                Internal comment
+              </label>
+            )}
+
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={submittingComment}
+            >
+              {submittingComment
+                ? "Adding..."
+                : "Add Comment"}
+            </button>
+          </form>
+        </div>
+
+        {/* Attachments */}
+
+        <div className="ticket-section">
+          <div className="ticket-section-header">
+            <div>
+              <h2>
+                Attachments
+              </h2>
+
+              <p>
+                Upload supporting files related
+                to this ticket.
+              </p>
+            </div>
           </div>
-        )}
-
-        <form
-          className="comment-form"
-          onSubmit={handleFileUpload}
-        >
-          <label
-            className="form-label"
-            htmlFor="ticket-attachment"
-          >
-            Upload a file
-          </label>
-
-          <input
-            id="ticket-attachment"
-            ref={fileInputRef}
-            type="file"
-            className="form-control"
-            onChange={handleFileChange}
-            disabled={uploadingFile}
-            accept=".pdf,.png,.jpg,.jpeg,.txt,.csv,.docx"
-          />
-
-          <span className="upload-help">
-            Allowed: PDF, PNG, JPG, JPEG, TXT, CSV, DOCX · Maximum 10 MB
-          </span>
 
           {attachmentError && (
-            <div className="error-message">
+            <div className="inline-error">
               {attachmentError}
             </div>
           )}
 
-          <button
-            type="submit"
-            className="primary-button"
-            disabled={
-              uploadingFile ||
-              !selectedFile
-            }
-          >
-            {uploadingFile
-              ? "Uploading..."
-              : "Upload File"}
-          </button>
-        </form>
-      </section>
+          <div className="attachment-upload">
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={
+                handleFileChange
+              }
+            />
 
-      {/* Ticket Information */}
+            {selectedFile && (
+              <div className="selected-file">
+                Selected:{" "}
+                <strong>
+                  {selectedFile.name}
+                </strong>
+              </div>
+            )}
 
-      <section className="ticket-card">
-        <div className="ticket-card-header">
-          <div>
-            <h2>Ticket Information</h2>
-
-            <p>
-              System information associated with this ticket.
-            </p>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={
+                uploadingFile ||
+                !selectedFile
+              }
+              onClick={handleUpload}
+            >
+              {uploadingFile
+                ? "Uploading..."
+                : "Upload File"}
+            </button>
           </div>
+
+          {loadingAttachments ? (
+            <div className="ticket-loading-small">
+              Loading attachments...
+            </div>
+          ) : attachments.length === 0 ? (
+            <div className="ticket-empty-state">
+              No attachments.
+            </div>
+          ) : (
+            <div className="attachments-list">
+              {attachments.map(
+                (attachment) => (
+                  <div
+                    className="attachment-item"
+                    key={attachment.id}
+                  >
+                    <div>
+                      <strong>
+                        {attachment.file_name ||
+                          attachment.filename ||
+                          "Attachment"}
+                      </strong>
+
+                      <span>
+                        {formatFileSize(
+                          attachment.file_size
+                        )}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={
+                        downloadingAttachmentId ===
+                        attachment.id
+                      }
+                      onClick={() =>
+                        handleDownloadAttachment(
+                          attachment
+                        )
+                      }
+                    >
+                      {downloadingAttachmentId ===
+                      attachment.id
+                        ? "Downloading..."
+                        : "Download"}
+                    </button>
+                  </div>
+                )
+              )}
+            </div>
+          )}
         </div>
 
-        <div className="ticket-info-grid">
-          <div>
-            <span>Ticket ID</span>
-            <strong>{ticket.id}</strong>
+        {/* Ticket Information */}
+
+        <div className="ticket-section">
+          <div className="ticket-section-header">
+            <div>
+              <h2>
+                Ticket Information
+              </h2>
+            </div>
           </div>
 
-          <div>
-            <span>Ticket Number</span>
-            <strong>
-              {ticket.ticket_number}
-            </strong>
-          </div>
+          <div className="ticket-information-grid">
+            <div>
+              <span>
+                Ticket ID
+              </span>
 
-          <div>
-            <span>Created At</span>
-            <strong>
-              {formatDate(
-                ticket.created_at
-              )}
-            </strong>
-          </div>
+              <strong>
+                #{ticket.id}
+              </strong>
+            </div>
 
-          <div>
-            <span>Updated At</span>
-            <strong>
-              {formatDate(
-                ticket.updated_at
-              )}
-            </strong>
-          </div>
+            <div>
+              <span>
+                Created By
+              </span>
 
-          <div>
-            <span>Resolved At</span>
-            <strong>
-              {formatDate(
-                ticket.resolved_at
-              )}
-            </strong>
-          </div>
+              <strong>
+                User #{ticket.created_by}
+              </strong>
+            </div>
 
-          <div>
-            <span>Closed At</span>
-            <strong>
-              {formatDate(
-                ticket.closed_at
-              )}
-            </strong>
+            <div>
+              <span>
+                Category
+              </span>
+
+              <strong>
+                {getCategoryName(
+                  ticket.category_id
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Status
+              </span>
+
+              <strong>
+                {formatStatus(
+                  ticket.status
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Priority
+              </span>
+
+              <strong>
+                {ticket.priority || "N/A"}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Created At
+              </span>
+
+              <strong>
+                {formatDate(
+                  ticket.created_at
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Updated At
+              </span>
+
+              <strong>
+                {formatDate(
+                  ticket.updated_at
+                )}
+              </strong>
+            </div>
+
+            <div>
+              <span>
+                Assigned Engineer
+              </span>
+
+              <strong>
+                {ticket.assigned_to
+                  ? `User #${ticket.assigned_to}`
+                  : "Unassigned"}
+              </strong>
+            </div>
           </div>
         </div>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
 

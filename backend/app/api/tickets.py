@@ -1,13 +1,17 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user
+
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.models.category import Category
 from app.models.team import Team
+from app.models.sla_policy import SLAPolicy
+from app.models.notification import Notification
+
 from app.schemas.ticket import (
     TicketCreate,
     TicketResponse,
@@ -97,6 +101,64 @@ def generate_ticket_number(db: Session) -> str:
     return f"IT-{year}-{next_number:06d}"
 
 
+def get_active_sla_policy(
+    db: Session,
+    priority: str,
+) -> SLAPolicy:
+    """
+    Find the active SLA policy for a ticket priority.
+    """
+
+    policy = (
+        db.query(SLAPolicy)
+        .filter(
+            SLAPolicy.priority == priority,
+            SLAPolicy.is_active == True,
+        )
+        .first()
+    )
+
+    if not policy:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No active SLA policy exists "
+                f"for priority {priority}"
+            ),
+        )
+
+    return policy
+
+
+def calculate_sla_deadlines(
+    created_at: datetime,
+    policy: SLAPolicy,
+) -> tuple[datetime, datetime]:
+    """
+    Calculate response and resolution deadlines
+    using the SLA policy.
+    """
+
+    response_deadline = (
+        created_at
+        + timedelta(
+            minutes=policy.response_time_minutes
+        )
+    )
+
+    resolution_deadline = (
+        created_at
+        + timedelta(
+            minutes=policy.resolution_time_minutes
+        )
+    )
+
+    return (
+        response_deadline,
+        resolution_deadline,
+    )
+
+
 def check_ticket_view_access(
     ticket: Ticket,
     current_user: User,
@@ -182,10 +244,14 @@ def create_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    user = db.query(User).filter(
-        User.id == current_user.id,
-        User.is_active == True,
-    ).first()
+    user = (
+        db.query(User)
+        .filter(
+            User.id == current_user.id,
+            User.is_active == True,
+        )
+        .first()
+    )
 
     if not user:
         raise HTTPException(
@@ -194,10 +260,14 @@ def create_ticket(
         )
 
     if ticket_data.category_id is not None:
-        category = db.query(Category).filter(
-            Category.id == ticket_data.category_id,
-            Category.is_active == True,
-        ).first()
+        category = (
+            db.query(Category)
+            .filter(
+                Category.id == ticket_data.category_id,
+                Category.is_active == True,
+            )
+            .first()
+        )
 
         if not category:
             raise HTTPException(
@@ -205,11 +275,28 @@ def create_ticket(
                 detail="Category not found or inactive",
             )
 
-    if ticket_data.priority not in VALID_PRIORITIES:
+    priority = ticket_data.priority.upper().strip()
+
+    if priority not in VALID_PRIORITIES:
         raise HTTPException(
             status_code=400,
             detail="Invalid priority",
         )
+
+    sla_policy = get_active_sla_policy(
+        db=db,
+        priority=priority,
+    )
+
+    created_at = datetime.utcnow()
+
+    (
+        sla_response_deadline,
+        sla_resolution_deadline,
+    ) = calculate_sla_deadlines(
+        created_at=created_at,
+        policy=sla_policy,
+    )
 
     ticket_number = generate_ticket_number(db)
 
@@ -219,11 +306,58 @@ def create_ticket(
         description=ticket_data.description,
         created_by=current_user.id,
         category_id=ticket_data.category_id,
-        priority=ticket_data.priority,
+        priority=priority,
         status="OPEN",
+        created_at=created_at,
+        updated_at=created_at,
+        sla_response_deadline=sla_response_deadline,
+        sla_resolution_deadline=sla_resolution_deadline,
+        sla_response_met=None,
+        sla_resolution_met=None,
     )
 
     db.add(new_ticket)
+
+    # Flush the ticket so that the database generates
+    # the ticket ID before creating notifications.
+    db.flush()
+
+    # -------------------------------------------------
+    # Create notification for all active administrators
+    # -------------------------------------------------
+
+    administrators = (
+        db.query(User)
+        .filter(
+            User.role_id == 3,
+            User.is_active == True,
+        )
+        .all()
+    )
+
+    for administrator in administrators:
+        # Do not notify the creator if an administrator
+        # creates a ticket themselves.
+        if administrator.id == current_user.id:
+            continue
+
+        notification = Notification(
+            user_id=administrator.id,
+            ticket_id=new_ticket.id,
+            type="NEW_TICKET",
+            title="New Ticket Created",
+            message=(
+                f"Ticket {new_ticket.ticket_number} "
+                f"has been created: "
+                f"{new_ticket.title}"
+            ),
+            is_read=False,
+            created_at=datetime.utcnow(),
+            read_at=None,
+        )
+
+        db.add(notification)
+
     db.commit()
     db.refresh(new_ticket)
 
@@ -285,9 +419,11 @@ def get_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ticket = db.query(Ticket).filter(
-        Ticket.id == ticket_id
-    ).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id)
+        .first()
+    )
 
     if not ticket:
         raise HTTPException(
@@ -313,9 +449,11 @@ def update_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ticket = db.query(Ticket).filter(
-        Ticket.id == ticket_id
-    ).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id)
+        .first()
+    )
 
     if not ticket:
         raise HTTPException(
@@ -335,10 +473,14 @@ def update_ticket(
         ticket.description = ticket_data.description
 
     if ticket_data.category_id is not None:
-        category = db.query(Category).filter(
-            Category.id == ticket_data.category_id,
-            Category.is_active == True,
-        ).first()
+        category = (
+            db.query(Category)
+            .filter(
+                Category.id == ticket_data.category_id,
+                Category.is_active == True,
+            )
+            .first()
+        )
 
         if not category:
             raise HTTPException(
@@ -349,13 +491,35 @@ def update_ticket(
         ticket.category_id = ticket_data.category_id
 
     if ticket_data.priority is not None:
-        if ticket_data.priority not in VALID_PRIORITIES:
+        priority = (
+            ticket_data.priority
+            .upper()
+            .strip()
+        )
+
+        if priority not in VALID_PRIORITIES:
             raise HTTPException(
                 status_code=400,
                 detail="Invalid priority",
             )
 
-        ticket.priority = ticket_data.priority
+        sla_policy = get_active_sla_policy(
+            db=db,
+            priority=priority,
+        )
+
+        ticket.priority = priority
+
+        (
+            ticket.sla_response_deadline,
+            ticket.sla_resolution_deadline,
+        ) = calculate_sla_deadlines(
+            created_at=ticket.created_at,
+            policy=sla_policy,
+        )
+
+        ticket.sla_response_met = None
+        ticket.sla_resolution_met = None
 
     db.commit()
     db.refresh(ticket)
@@ -373,9 +537,11 @@ def update_ticket_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ticket = db.query(Ticket).filter(
-        Ticket.id == ticket_id
-    ).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id)
+        .first()
+    )
 
     if not ticket:
         raise HTTPException(
@@ -498,6 +664,8 @@ def update_ticket_status(
     # Update timestamps
     # -------------------------------------------------
 
+    now = datetime.utcnow()
+
     if new_status in [
         "OPEN",
         "ASSIGNED",
@@ -509,20 +677,131 @@ def update_ticket_status(
         ticket.closed_at = None
 
     elif new_status == "RESOLVED":
-        ticket.resolved_at = datetime.utcnow()
+        ticket.resolved_at = now
         ticket.closed_at = None
 
     elif new_status == "CLOSED":
         if ticket.resolved_at is None:
-            ticket.resolved_at = datetime.utcnow()
+            ticket.resolved_at = now
 
-        ticket.closed_at = datetime.utcnow()
+        ticket.closed_at = now
 
     elif new_status == "CANCELLED":
         ticket.resolved_at = None
         ticket.closed_at = None
 
     ticket.status = new_status
+
+    # -------------------------------------------------
+    # SLA response tracking
+    # -------------------------------------------------
+
+    if (
+        ticket.sla_response_met is None
+        and new_status in [
+            "ASSIGNED",
+            "IN_PROGRESS",
+            "PENDING",
+            "RESOLVED",
+            "CLOSED",
+        ]
+    ):
+        if (
+            ticket.sla_response_deadline
+            and now <= ticket.sla_response_deadline
+        ):
+            ticket.sla_response_met = True
+        else:
+            ticket.sla_response_met = False
+
+    # -------------------------------------------------
+    # SLA resolution tracking
+    # -------------------------------------------------
+
+    if (
+        ticket.sla_resolution_met is None
+        and new_status in [
+            "RESOLVED",
+            "CLOSED",
+        ]
+    ):
+        if (
+            ticket.sla_resolution_deadline
+            and now <= ticket.sla_resolution_deadline
+        ):
+            ticket.sla_resolution_met = True
+        else:
+            ticket.sla_resolution_met = False
+
+    # -------------------------------------------------
+    # Create notification for ticket creator
+    # -------------------------------------------------
+
+    if (
+        ticket.created_by != current_user.id
+        and ticket.created_by is not None
+    ):
+        status_messages = {
+            "OPEN": (
+                "Your ticket has been moved to OPEN."
+            ),
+            "ASSIGNED": (
+                "Your ticket has been assigned "
+                "to a support engineer."
+            ),
+            "IN_PROGRESS": (
+                "A support engineer is now "
+                "working on your ticket."
+            ),
+            "PENDING": (
+                "Your ticket is currently pending."
+            ),
+            "RESOLVED": (
+                "Your ticket has been resolved."
+            ),
+            "CLOSED": (
+                "Your ticket has been closed."
+            ),
+            "REOPENED": (
+                "Your ticket has been reopened."
+            ),
+            "CANCELLED": (
+                "Your ticket has been cancelled."
+            ),
+        }
+
+        status_titles = {
+            "OPEN": "Ticket Status Updated",
+            "ASSIGNED": "Ticket Assigned",
+            "IN_PROGRESS": "Ticket In Progress",
+            "PENDING": "Ticket Pending",
+            "RESOLVED": "Ticket Resolved",
+            "CLOSED": "Ticket Closed",
+            "REOPENED": "Ticket Reopened",
+            "CANCELLED": "Ticket Cancelled",
+        }
+
+        notification = Notification(
+            user_id=ticket.created_by,
+            ticket_id=ticket.id,
+            type="TICKET_STATUS_CHANGED",
+            title=status_titles.get(
+                new_status,
+                "Ticket Status Updated",
+            ),
+            message=(
+                f"Ticket {ticket.ticket_number}: "
+                f"{status_messages.get(
+                    new_status,
+                    f'Status changed to {new_status}.'
+                )}"
+            ),
+            is_read=False,
+            created_at=datetime.utcnow(),
+            read_at=None,
+        )
+
+        db.add(notification)
 
     db.commit()
     db.refresh(ticket)
@@ -540,9 +819,11 @@ def update_ticket_assignment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ticket = db.query(Ticket).filter(
-        Ticket.id == ticket_id
-    ).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id)
+        .first()
+    )
 
     if not ticket:
         raise HTTPException(
@@ -581,10 +862,14 @@ def update_ticket_assignment(
         ticket.assigned_to = None
 
     else:
-        engineer = db.query(User).filter(
-            User.id == assignment_data.assigned_to,
-            User.is_active == True,
-        ).first()
+        engineer = (
+            db.query(User)
+            .filter(
+                User.id == assignment_data.assigned_to,
+                User.is_active == True,
+            )
+            .first()
+        )
 
         if not engineer:
             raise HTTPException(
@@ -613,9 +898,13 @@ def update_ticket_assignment(
     # -------------------------------------------------
 
     if assignment_data.team_id is not None:
-        team = db.query(Team).filter(
-            Team.id == assignment_data.team_id
-        ).first()
+        team = (
+            db.query(Team)
+            .filter(
+                Team.id == assignment_data.team_id
+            )
+            .first()
+        )
 
         if not team:
             raise HTTPException(
@@ -623,9 +912,7 @@ def update_ticket_assignment(
                 detail="Team not found",
             )
 
-        ticket.team_id = (
-            assignment_data.team_id
-        )
+        ticket.team_id = assignment_data.team_id
 
     # -------------------------------------------------
     # Automatically update workflow status
@@ -633,12 +920,48 @@ def update_ticket_assignment(
 
     if ticket.assigned_to is not None:
         ticket.status = "ASSIGNED"
-
     else:
         ticket.status = "OPEN"
 
     ticket.resolved_at = None
     ticket.closed_at = None
+
+    # -------------------------------------------------
+    # SLA response tracking
+    # -------------------------------------------------
+
+    if ticket.sla_response_met is None:
+        now = datetime.utcnow()
+
+        if (
+            ticket.sla_response_deadline
+            and now <= ticket.sla_response_deadline
+        ):
+            ticket.sla_response_met = True
+        else:
+            ticket.sla_response_met = False
+
+    # -------------------------------------------------
+    # Create notification for assigned engineer
+    # -------------------------------------------------
+
+    if ticket.assigned_to is not None:
+        notification = Notification(
+            user_id=ticket.assigned_to,
+            ticket_id=ticket.id,
+            type="TICKET_ASSIGNED",
+            title="New Ticket Assigned",
+            message=(
+                f"Ticket {ticket.ticket_number} "
+                f"has been assigned to you: "
+                f"{ticket.title}"
+            ),
+            is_read=False,
+            created_at=datetime.utcnow(),
+            read_at=None,
+        )
+
+        db.add(notification)
 
     db.commit()
     db.refresh(ticket)
@@ -656,9 +979,11 @@ def rate_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ticket = db.query(Ticket).filter(
-        Ticket.id == ticket_id
-    ).first()
+    ticket = (
+        db.query(Ticket)
+        .filter(Ticket.id == ticket_id)
+        .first()
+    )
 
     if not ticket:
         raise HTTPException(
@@ -708,6 +1033,7 @@ def rate_ticket(
         )
 
     ticket.rating = rating_data.rating
+
     ticket.feedback = (
         rating_data.feedback.strip()
         if rating_data.feedback is not None
