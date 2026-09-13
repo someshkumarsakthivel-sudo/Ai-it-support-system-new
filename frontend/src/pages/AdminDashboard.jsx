@@ -41,6 +41,24 @@ function AdminDashboard() {
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
 
+  const [managementTeams, setManagementTeams] = useState([]);
+  const [managementCategories, setManagementCategories] = useState([]);
+  const [teamForm, setTeamForm] = useState({
+    name: "",
+    description: "",
+  });
+  const [categoryForm, setCategoryForm] = useState({
+    name: "",
+    description: "",
+    parent_id: "",
+  });
+  const [editingTeamId, setEditingTeamId] = useState(null);
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [managementLoading, setManagementLoading] = useState(false);
+  const [managementSaving, setManagementSaving] = useState(false);
+  const [managementError, setManagementError] = useState("");
+  const [managementMessage, setManagementMessage] = useState("");
+
   async function loadNotifications() {
     try {
       const accessToken =
@@ -144,6 +162,319 @@ function AdminDashboard() {
     setSelectedTicketId(null);
     setShowCreateTicket(false);
     setCurrentPage("users");
+  }
+
+  function handleOpenTeams() {
+    setSelectedTicketId(null);
+    setShowCreateTicket(false);
+    setManagementError("");
+    setManagementMessage("");
+    setCurrentPage("teams");
+  }
+
+  function handleOpenCategories() {
+    setSelectedTicketId(null);
+    setShowCreateTicket(false);
+    setManagementError("");
+    setManagementMessage("");
+    setCurrentPage("categories");
+  }
+
+  async function managementApiRequest(endpoint, options = {}) {
+    const accessToken =
+      localStorage.getItem("access_token") ||
+      sessionStorage.getItem("access_token");
+
+    if (!accessToken) {
+      throw new Error(
+        "Your session has expired. Please log in again."
+      );
+    }
+
+    const response = await fetch(
+      `https://ai-it-support-system.onrender.com${endpoint}`,
+      {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+          ...(options.headers || {}),
+        },
+      }
+    );
+
+    const contentType = response.headers.get("content-type") || "";
+    const data = contentType.includes("application/json")
+      ? await response.json()
+      : null;
+
+    if (!response.ok) {
+      throw new Error(
+        data?.detail ||
+          data?.message ||
+          "The requested operation failed."
+      );
+    }
+
+    return data;
+  }
+
+  async function loadManagementTeams() {
+    try {
+      setManagementLoading(true);
+      setManagementError("");
+      const accessToken =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
+
+      const data = await getTeams(accessToken);
+      setManagementTeams(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setManagementError(
+        err?.message || "Failed to load teams."
+      );
+    } finally {
+      setManagementLoading(false);
+    }
+  }
+
+  async function loadManagementCategories() {
+    try {
+      setManagementLoading(true);
+      setManagementError("");
+      const accessToken =
+        localStorage.getItem("access_token") ||
+        sessionStorage.getItem("access_token");
+
+      const data = await getCategories(accessToken);
+      setManagementCategories(
+        Array.isArray(data) ? data : []
+      );
+    } catch (err) {
+      console.error(err);
+      setManagementError(
+        err?.message || "Failed to load categories."
+      );
+    } finally {
+      setManagementLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (currentPage === "teams") {
+      loadManagementTeams();
+    }
+
+    if (currentPage === "categories") {
+      loadManagementCategories();
+    }
+  }, [currentPage]);
+
+  async function handleSaveTeam() {
+    if (!teamForm.name.trim()) {
+      setManagementError("Team name is required.");
+      return;
+    }
+
+    try {
+      setManagementSaving(true);
+      setManagementError("");
+      setManagementMessage("");
+
+      const payload = {
+        name: teamForm.name.trim(),
+        description: teamForm.description.trim() || null,
+      };
+
+      if (editingTeamId) {
+        await managementApiRequest(
+          `/api/teams/${editingTeamId}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          }
+        );
+        setManagementMessage("Team updated successfully.");
+      } else {
+        await managementApiRequest("/api/teams", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        setManagementMessage("Team created successfully.");
+      }
+
+      setTeamForm({ name: "", description: "" });
+      setEditingTeamId(null);
+      await loadManagementTeams();
+      await loadAdminData();
+    } catch (err) {
+      console.error(err);
+      setManagementError(
+        err?.message || "Unable to save team."
+      );
+    } finally {
+      setManagementSaving(false);
+    }
+  }
+
+  function startEditTeam(team) {
+    setEditingTeamId(team.id);
+    setTeamForm({
+      name: team.name || "",
+      description: team.description || "",
+    });
+    setManagementError("");
+    setManagementMessage("");
+  }
+
+  function cancelEditTeam() {
+    setEditingTeamId(null);
+    setTeamForm({ name: "", description: "" });
+    setManagementError("");
+    setManagementMessage("");
+  }
+
+  async function handleDeleteTeam(teamId) {
+    if (!window.confirm("Delete this team?")) {
+      return;
+    }
+
+    try {
+      setManagementSaving(true);
+      setManagementError("");
+      setManagementMessage("");
+
+      await managementApiRequest(`/api/teams/${teamId}`, {
+        method: "DELETE",
+      });
+
+      setManagementMessage("Team deleted successfully.");
+      await loadManagementTeams();
+      await loadAdminData();
+    } catch (err) {
+      console.error(err);
+      setManagementError(
+        err?.message || "Unable to delete team."
+      );
+    } finally {
+      setManagementSaving(false);
+    }
+  }
+
+  async function handleSaveCategory() {
+    if (!categoryForm.name.trim()) {
+      setManagementError("Category name is required.");
+      return;
+    }
+
+    try {
+      setManagementSaving(true);
+      setManagementError("");
+      setManagementMessage("");
+
+      const payload = {
+        name: categoryForm.name.trim(),
+        description:
+          categoryForm.description.trim() || null,
+        parent_id: categoryForm.parent_id
+          ? Number(categoryForm.parent_id)
+          : null,
+      };
+
+      if (editingCategoryId) {
+        await managementApiRequest(
+          `/api/categories/${editingCategoryId}`,
+          {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          }
+        );
+        setManagementMessage(
+          "Category updated successfully."
+        );
+      } else {
+        await managementApiRequest("/api/categories", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        setManagementMessage(
+          "Category created successfully."
+        );
+      }
+
+      setCategoryForm({
+        name: "",
+        description: "",
+        parent_id: "",
+      });
+      setEditingCategoryId(null);
+      await loadManagementCategories();
+      await loadAdminData();
+    } catch (err) {
+      console.error(err);
+      setManagementError(
+        err?.message || "Unable to save category."
+      );
+    } finally {
+      setManagementSaving(false);
+    }
+  }
+
+  function startEditCategory(category) {
+    setEditingCategoryId(category.id);
+    setCategoryForm({
+      name: category.name || "",
+      description: category.description || "",
+      parent_id: category.parent_id
+        ? String(category.parent_id)
+        : "",
+    });
+    setManagementError("");
+    setManagementMessage("");
+  }
+
+  function cancelEditCategory() {
+    setEditingCategoryId(null);
+    setCategoryForm({
+      name: "",
+      description: "",
+      parent_id: "",
+    });
+    setManagementError("");
+    setManagementMessage("");
+  }
+
+  async function handleDeleteCategory(categoryId) {
+    if (!window.confirm("Delete this category?")) {
+      return;
+    }
+
+    try {
+      setManagementSaving(true);
+      setManagementError("");
+      setManagementMessage("");
+
+      await managementApiRequest(
+        `/api/categories/${categoryId}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      setManagementMessage(
+        "Category deleted successfully."
+      );
+      await loadManagementCategories();
+      await loadAdminData();
+    } catch (err) {
+      console.error(err);
+      setManagementError(
+        err?.message || "Unable to delete category."
+      );
+    } finally {
+      setManagementSaving(false);
+    }
   }
 
   function handleOpenKnowledgeBase() {
@@ -558,6 +889,498 @@ function AdminDashboard() {
     );
   }
 
+  if (currentPage === "teams") {
+    return (
+      <div className="admin-dashboard-page">
+        <header className="admin-dashboard-header">
+          <div className="admin-brand">
+            <div className="admin-logo">IT</div>
+            <div>
+              <h1>AI IT Support</h1>
+              <span>Ticket Management System</span>
+            </div>
+          </div>
+
+          <div className="admin-header-user">
+            <div className="admin-user-info">
+              <strong>{user.name || "System Admin"}</strong>
+              <span>Administrator</span>
+            </div>
+            <button
+              type="button"
+              className="admin-logout-button"
+              onClick={handleLogout}
+            >
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <main className="admin-dashboard-container">
+          <section className="admin-panel">
+            <div className="admin-panel-header">
+              <div>
+                <p className="admin-welcome-label">Administration</p>
+                <h3>Teams Management</h3>
+                <p>Manage support teams.</p>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="admin-panel-action"
+                  onClick={loadManagementTeams}
+                  disabled={managementLoading}
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  className="admin-panel-action"
+                  onClick={() => setCurrentPage("dashboard")}
+                >
+                  ← Dashboard
+                </button>
+              </div>
+            </div>
+
+            {managementError && (
+              <div className="admin-dashboard-error" style={{ marginBottom: "16px" }}>
+                {managementError}
+              </div>
+            )}
+
+            {managementMessage && (
+              <div
+                style={{
+                  marginBottom: "16px",
+                  padding: "12px 14px",
+                  borderRadius: "10px",
+                  background: "#ecfdf5",
+                  color: "#065f46",
+                  border: "1px solid #a7f3d0",
+                }}
+              >
+                {managementMessage}
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(280px, 360px) 1fr",
+                gap: "24px",
+              }}
+            >
+              <div
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  padding: "18px",
+                  background: "#ffffff",
+                }}
+              >
+                <h4>{editingTeamId ? "Edit Team" : "Create Team"}</h4>
+
+                <label style={{ display: "block", marginTop: "14px", fontSize: "13px" }}>
+                  Team name
+                </label>
+                <input
+                  type="text"
+                  value={teamForm.name}
+                  onChange={(event) =>
+                    setTeamForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="IT Support"
+                  style={{
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px 12px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                  }}
+                />
+
+                <label style={{ display: "block", marginTop: "14px", fontSize: "13px" }}>
+                  Description
+                </label>
+                <textarea
+                  value={teamForm.description}
+                  onChange={(event) =>
+                    setTeamForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="General IT support team"
+                  style={{
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px 12px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                    resize: "vertical",
+                  }}
+                />
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                  <button
+                    type="button"
+                    className="admin-refresh-button"
+                    onClick={handleSaveTeam}
+                    disabled={managementSaving}
+                  >
+                    {managementSaving
+                      ? "Saving..."
+                      : editingTeamId
+                        ? "Update Team"
+                        : "Create Team"}
+                  </button>
+
+                  {editingTeamId && (
+                    <button
+                      type="button"
+                      className="admin-panel-action"
+                      onClick={cancelEditTeam}
+                      disabled={managementSaving}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 style={{ marginBottom: "14px" }}>
+                  Teams ({managementTeams.length})
+                </h4>
+
+                {managementLoading ? (
+                  <p>Loading teams...</p>
+                ) : managementTeams.length === 0 ? (
+                  <div className="admin-empty-state">
+                    <div className="admin-empty-icon">T</div>
+                    <h4>No teams found</h4>
+                    <p>Create your first support team.</p>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "12px",
+                    }}
+                  >
+                    {managementTeams.map((team) => (
+                      <div
+                        key={team.id}
+                        style={{
+                          border: "1px solid #e5e7eb",
+                          borderRadius: "12px",
+                          padding: "16px",
+                          background: "#ffffff",
+                        }}
+                      >
+                        <strong>{team.name}</strong>
+                        <p style={{ margin: "6px 0 12px", color: "#6b7280" }}>
+                          {team.description || "No description"}
+                        </p>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button
+                            type="button"
+                            className="admin-panel-action"
+                            onClick={() => startEditTeam(team)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-refresh-button"
+                            onClick={() => handleDeleteTeam(team.id)}
+                            disabled={managementSaving}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (currentPage === "categories") {
+    return (
+      <div className="admin-dashboard-page">
+        <header className="admin-dashboard-header">
+          <div className="admin-brand">
+            <div className="admin-logo">IT</div>
+            <div>
+              <h1>AI IT Support</h1>
+              <span>Ticket Management System</span>
+            </div>
+          </div>
+
+          <div className="admin-header-user">
+            <div className="admin-user-info">
+              <strong>{user.name || "System Admin"}</strong>
+              <span>Administrator</span>
+            </div>
+            <button
+              type="button"
+              className="admin-logout-button"
+              onClick={handleLogout}
+            >
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <main className="admin-dashboard-container">
+          <section className="admin-panel">
+            <div className="admin-panel-header">
+              <div>
+                <p className="admin-welcome-label">Administration</p>
+                <h3>Categories Management</h3>
+                <p>Manage ticket categories.</p>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="admin-panel-action"
+                  onClick={loadManagementCategories}
+                  disabled={managementLoading}
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  className="admin-panel-action"
+                  onClick={() => setCurrentPage("dashboard")}
+                >
+                  ← Dashboard
+                </button>
+              </div>
+            </div>
+
+            {managementError && (
+              <div className="admin-dashboard-error" style={{ marginBottom: "16px" }}>
+                {managementError}
+              </div>
+            )}
+
+            {managementMessage && (
+              <div
+                style={{
+                  marginBottom: "16px",
+                  padding: "12px 14px",
+                  borderRadius: "10px",
+                  background: "#ecfdf5",
+                  color: "#065f46",
+                  border: "1px solid #a7f3d0",
+                }}
+              >
+                {managementMessage}
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(280px, 360px) 1fr",
+                gap: "24px",
+              }}
+            >
+              <div
+                style={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "12px",
+                  padding: "18px",
+                  background: "#ffffff",
+                }}
+              >
+                <h4>
+                  {editingCategoryId
+                    ? "Edit Category"
+                    : "Create Category"}
+                </h4>
+
+                <label style={{ display: "block", marginTop: "14px", fontSize: "13px" }}>
+                  Category name
+                </label>
+                <input
+                  type="text"
+                  value={categoryForm.name}
+                  onChange={(event) =>
+                    setCategoryForm((current) => ({
+                      ...current,
+                      name: event.target.value,
+                    }))
+                  }
+                  placeholder="Network"
+                  style={{
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px 12px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                  }}
+                />
+
+                <label style={{ display: "block", marginTop: "14px", fontSize: "13px" }}>
+                  Description
+                </label>
+                <textarea
+                  value={categoryForm.description}
+                  onChange={(event) =>
+                    setCategoryForm((current) => ({
+                      ...current,
+                      description: event.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="Network and connectivity issues"
+                  style={{
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px 12px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                    resize: "vertical",
+                  }}
+                />
+
+                <label style={{ display: "block", marginTop: "14px", fontSize: "13px" }}>
+                  Parent category (optional)
+                </label>
+                <select
+                  value={categoryForm.parent_id}
+                  onChange={(event) =>
+                    setCategoryForm((current) => ({
+                      ...current,
+                      parent_id: event.target.value,
+                    }))
+                  }
+                  style={{
+                    width: "100%",
+                    marginTop: "6px",
+                    padding: "10px 12px",
+                    border: "1px solid #d1d5db",
+                    borderRadius: "8px",
+                    background: "#ffffff",
+                  }}
+                >
+                  <option value="">No parent</option>
+                  {managementCategories
+                    .filter((category) => category.id !== editingCategoryId)
+                    .map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                </select>
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "16px" }}>
+                  <button
+                    type="button"
+                    className="admin-refresh-button"
+                    onClick={handleSaveCategory}
+                    disabled={managementSaving}
+                  >
+                    {managementSaving
+                      ? "Saving..."
+                      : editingCategoryId
+                        ? "Update Category"
+                        : "Create Category"}
+                  </button>
+
+                  {editingCategoryId && (
+                    <button
+                      type="button"
+                      className="admin-panel-action"
+                      onClick={cancelEditCategory}
+                      disabled={managementSaving}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h4 style={{ marginBottom: "14px" }}>
+                  Categories ({managementCategories.length})
+                </h4>
+
+                {managementLoading ? (
+                  <p>Loading categories...</p>
+                ) : managementCategories.length === 0 ? (
+                  <div className="admin-empty-state">
+                    <div className="admin-empty-icon">C</div>
+                    <h4>No categories found</h4>
+                    <p>Create your first ticket category.</p>
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: "12px",
+                    }}
+                  >
+                    {managementCategories.map((category) => (
+                      <div
+                        key={category.id}
+                        style={{
+                          border: "1px solid #e5e7eb",
+                          borderRadius: "12px",
+                          padding: "16px",
+                          background: "#ffffff",
+                        }}
+                      >
+                        <strong>{category.name}</strong>
+                        <p style={{ margin: "6px 0 12px", color: "#6b7280" }}>
+                          {category.description || "No description"}
+                        </p>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button
+                            type="button"
+                            className="admin-panel-action"
+                            onClick={() =>
+                              startEditCategory(category)
+                            }
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-refresh-button"
+                            onClick={() =>
+                              handleDeleteCategory(category.id)
+                            }
+                            disabled={managementSaving}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   if (currentPage === "knowledge-base") {
     return (
       <KnowledgeBase
@@ -640,6 +1463,7 @@ function AdminDashboard() {
           <button
             type="button"
             className="admin-nav-item"
+            onClick={handleOpenTeams}
           >
             Teams
           </button>
@@ -647,6 +1471,7 @@ function AdminDashboard() {
           <button
             type="button"
             className="admin-nav-item"
+            onClick={handleOpenCategories}
           >
             Categories
           </button>
@@ -1547,6 +2372,7 @@ function AdminDashboard() {
             <button
               type="button"
               className="admin-quick-action"
+              onClick={handleOpenTeams}
             >
               <span className="admin-quick-icon">
                 T
@@ -1564,6 +2390,7 @@ function AdminDashboard() {
             <button
               type="button"
               className="admin-quick-action"
+              onClick={handleOpenCategories}
             >
               <span className="admin-quick-icon">
                 C
