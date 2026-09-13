@@ -4,14 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user
-
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.models.category import Category
 from app.models.team import Team
 from app.models.sla_policy import SLAPolicy
 from app.models.notification import Notification
-
 from app.schemas.ticket import (
     TicketCreate,
     TicketResponse,
@@ -84,7 +82,9 @@ ALLOWED_TRANSITIONS = {
 }
 
 
-def generate_ticket_number(db: Session) -> str:
+def generate_ticket_number(
+    db: Session,
+) -> str:
     year = datetime.utcnow().year
 
     last_ticket = (
@@ -108,7 +108,6 @@ def get_active_sla_policy(
     """
     Find the active SLA policy for a ticket priority.
     """
-
     policy = (
         db.query(SLAPolicy)
         .filter(
@@ -138,7 +137,6 @@ def calculate_sla_deadlines(
     Calculate response and resolution deadlines
     using the SLA policy.
     """
-
     response_deadline = (
         created_at
         + timedelta(
@@ -275,7 +273,11 @@ def create_ticket(
                 detail="Category not found or inactive",
             )
 
-    priority = ticket_data.priority.upper().strip()
+    priority = (
+        ticket_data.priority
+        .upper()
+        .strip()
+    )
 
     if priority not in VALID_PRIORITIES:
         raise HTTPException(
@@ -322,10 +324,7 @@ def create_ticket(
     # the ticket ID before creating notifications.
     db.flush()
 
-    # -------------------------------------------------
-    # Create notification for all active administrators
-    # -------------------------------------------------
-
+    # Create notification for all active administrators.
     administrators = (
         db.query(User)
         .filter(
@@ -470,7 +469,9 @@ def update_ticket(
         ticket.title = ticket_data.title
 
     if ticket_data.description is not None:
-        ticket.description = ticket_data.description
+        ticket.description = (
+            ticket_data.description
+        )
 
     if ticket_data.category_id is not None:
         category = (
@@ -488,7 +489,9 @@ def update_ticket(
                 detail="Category not found or inactive",
             )
 
-        ticket.category_id = ticket_data.category_id
+        ticket.category_id = (
+            ticket_data.category_id
+        )
 
     if ticket_data.priority is not None:
         priority = (
@@ -588,7 +591,6 @@ def update_ticket_status(
     # -------------------------------------------------
     # Employee permissions
     # -------------------------------------------------
-
     if current_user.role_id == 1:
         if ticket.created_by != current_user.id:
             raise HTTPException(
@@ -599,24 +601,44 @@ def update_ticket_status(
                 ),
             )
 
+        # Employees can:
+        # - cancel their own tickets
+        # - reopen their own tickets
+        # - close their own RESOLVED tickets
         employee_allowed_statuses = [
             "CANCELLED",
             "REOPENED",
+            "CLOSED",
         ]
 
         if new_status not in employee_allowed_statuses:
             raise HTTPException(
                 status_code=403,
                 detail=(
-                    "Employees can only cancel "
-                    "or reopen their own tickets"
+                    "Employees can only cancel, "
+                    "reopen, or close their own "
+                    "resolved tickets"
+                ),
+            )
+
+        # CLOSED is only valid when the ticket
+        # is currently RESOLVED.
+        if (
+            new_status == "CLOSED"
+            and current_status != "RESOLVED"
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Employees can only close "
+                    "tickets after they have "
+                    "been resolved"
                 ),
             )
 
     # -------------------------------------------------
     # Support Engineer permissions
     # -------------------------------------------------
-
     elif current_user.role_id == 2:
         if ticket.assigned_to != current_user.id:
             raise HTTPException(
@@ -647,7 +669,6 @@ def update_ticket_status(
     # -------------------------------------------------
     # Administrator permissions
     # -------------------------------------------------
-
     elif current_user.role_id == 3:
         pass
 
@@ -663,7 +684,6 @@ def update_ticket_status(
     # -------------------------------------------------
     # Update timestamps
     # -------------------------------------------------
-
     now = datetime.utcnow()
 
     if new_status in [
@@ -695,7 +715,6 @@ def update_ticket_status(
     # -------------------------------------------------
     # SLA response tracking
     # -------------------------------------------------
-
     if (
         ticket.sla_response_met is None
         and new_status in [
@@ -717,7 +736,6 @@ def update_ticket_status(
     # -------------------------------------------------
     # SLA resolution tracking
     # -------------------------------------------------
-
     if (
         ticket.sla_resolution_met is None
         and new_status in [
@@ -736,7 +754,6 @@ def update_ticket_status(
     # -------------------------------------------------
     # Create notification for ticket creator
     # -------------------------------------------------
-
     if (
         ticket.created_by != current_user.id
         and ticket.created_by is not None
@@ -857,7 +874,6 @@ def update_ticket_assignment(
     # -------------------------------------------------
     # Engineer assignment
     # -------------------------------------------------
-
     if assignment_data.assigned_to is None:
         ticket.assigned_to = None
 
@@ -896,7 +912,6 @@ def update_ticket_assignment(
     # -------------------------------------------------
     # Team assignment
     # -------------------------------------------------
-
     if assignment_data.team_id is not None:
         team = (
             db.query(Team)
@@ -912,12 +927,13 @@ def update_ticket_assignment(
                 detail="Team not found",
             )
 
-        ticket.team_id = assignment_data.team_id
+        ticket.team_id = (
+            assignment_data.team_id
+        )
 
     # -------------------------------------------------
     # Automatically update workflow status
     # -------------------------------------------------
-
     if ticket.assigned_to is not None:
         ticket.status = "ASSIGNED"
     else:
@@ -929,7 +945,6 @@ def update_ticket_assignment(
     # -------------------------------------------------
     # SLA response tracking
     # -------------------------------------------------
-
     if ticket.sla_response_met is None:
         now = datetime.utcnow()
 
@@ -944,7 +959,6 @@ def update_ticket_assignment(
     # -------------------------------------------------
     # Create notification for assigned engineer
     # -------------------------------------------------
-
     if ticket.assigned_to is not None:
         notification = Notification(
             user_id=ticket.assigned_to,
