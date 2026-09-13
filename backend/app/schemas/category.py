@@ -7,12 +7,14 @@ class CategoryCreate(BaseModel):
     name: str
     description: str | None = None
     parent_id: int | None = None
+    is_active: bool | None = True
 
 
 class CategoryUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     parent_id: int | None = None
+    is_active: bool | None = None
 
 
 class CategoryResponse(BaseModel):
