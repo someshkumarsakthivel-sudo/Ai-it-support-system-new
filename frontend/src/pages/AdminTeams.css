@@ -1,0 +1,715 @@
+.admin-teams-page {
+  min-height: 100vh;
+  padding: 32px;
+  box-sizing: border-box;
+  background: #f6f8fb;
+  color: #101828
+}
+
+.admin-teams-content {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto
+}
+
+.admin-teams-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px
+}
+
+.admin-teams-title-block {
+  min-width: 0
+}
+
+.admin-teams-back-link {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer
+}
+
+.admin-teams-back-link:hover {
+  color: #344054
+}
+
+.admin-teams-eyebrow {
+  margin: 0 0 8px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase
+}
+
+.admin-teams-title-block h1 {
+  margin: 0;
+  color: #101828;
+  font-size: 32px;
+  font-weight: 750;
+  line-height: 1.2
+}
+
+.admin-teams-subtitle {
+  margin: 9px 0 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.5
+}
+
+.admin-teams-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap
+}
+
+.admin-teams-primary-button,
+.admin-teams-secondary-button,
+.admin-teams-danger-button {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer
+}
+
+.admin-teams-primary-button {
+  border: 1px solid #344054;
+  background: #344054;
+  color: #fff
+}
+
+.admin-teams-primary-button:hover:not(:disabled) {
+  background: #1d2939
+}
+
+.admin-teams-secondary-button {
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  color: #344054
+}
+
+.admin-teams-secondary-button:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #98a2b3
+}
+
+.admin-teams-danger-button {
+  border: 1px solid #fecdca;
+  background: #fff6f5;
+  color: #b42318
+}
+
+.admin-teams-danger-button:hover:not(:disabled) {
+  background: #fee4e2
+}
+
+.admin-teams-primary-button:disabled,
+.admin-teams-secondary-button:disabled,
+.admin-teams-danger-button:disabled {
+  opacity: .55;
+  cursor: not-allowed
+}
+
+.admin-teams-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 22px
+}
+
+.admin-teams-stat-card {
+  padding: 20px;
+  border: 1px solid #e4e7ec;
+  border-radius: 14px;
+  background: #fff
+}
+
+.admin-teams-stat-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 600
+}
+
+.admin-teams-stat-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #f2f4f7;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 800
+}
+
+.admin-teams-stat-card strong {
+  display: block;
+  margin-top: 14px;
+  color: #101828;
+  font-size: 28px;
+  font-weight: 750;
+  line-height: 1
+}
+
+.admin-teams-stat-card>span:last-child {
+  display: block;
+  margin-top: 9px;
+  color: #98a2b3;
+  font-size: 12px
+}
+
+.admin-teams-directory {
+  width: 100%;
+  border: 1px solid #e4e7ec;
+  border-radius: 16px;
+  background: #fff;
+  overflow: hidden
+}
+
+.admin-teams-directory-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px
+}
+
+.admin-teams-directory-header h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 19px;
+  font-weight: 750
+}
+
+.admin-teams-directory-header p {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px
+}
+
+.admin-teams-directory-header p strong {
+  color: #344054
+}
+
+.admin-teams-summary {
+  color: #667085;
+  font-size: 12px
+}
+
+.admin-teams-summary strong {
+  color: #344054
+}
+
+.admin-teams-filters {
+  padding: 18px 24px 20px;
+  border-top: 1px solid #f0f2f5;
+  border-bottom: 1px solid #e4e7ec;
+  background: #fafbfc
+}
+
+.admin-teams-filters label {
+  display: block;
+  margin-bottom: 7px;
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700
+}
+
+.admin-teams-filters input {
+  width: 100%;
+  max-width: 680px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 9px;
+  outline: 0;
+  background: #fff;
+  color: #101828;
+  font-family: inherit;
+  font-size: 13px;
+  box-sizing: border-box
+}
+
+.admin-teams-filters input:focus {
+  border-color: #667085;
+  box-shadow: 0 0 0 3px rgba(71, 84, 103, .08)
+}
+
+.admin-teams-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 18px 24px 0;
+  padding: 13px 15px;
+  border: 1px solid #fecdca;
+  border-radius: 10px;
+  background: #fff6f5
+}
+
+.admin-teams-error strong {
+  display: block;
+  color: #b42318;
+  font-size: 13px
+}
+
+.admin-teams-error span {
+  display: block;
+  margin-top: 3px;
+  color: #d92d20;
+  font-size: 12px
+}
+
+.admin-teams-success {
+  margin: 18px 24px 0;
+  padding: 12px 14px;
+  border: 1px solid #abefc6;
+  border-radius: 9px;
+  background: #ecfdf3;
+  color: #067647;
+  font-size: 12px;
+  font-weight: 600
+}
+
+.admin-teams-state {
+  display: flex;
+  min-height: 300px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 40px 24px;
+  text-align: center
+}
+
+.admin-teams-state h3 {
+  margin: 16px 0 0;
+  color: #101828;
+  font-size: 17px
+}
+
+.admin-teams-state p {
+  margin: 7px 0 0;
+  color: #667085;
+  font-size: 13px
+}
+
+.admin-teams-spinner {
+  width: 30px;
+  height: 30px;
+  border: 3px solid #eaecf0;
+  border-top-color: #667085;
+  border-radius: 50%;
+  animation: adminTeamsSpin .8s linear infinite
+}
+
+@keyframes adminTeamsSpin {
+  to {
+    transform: rotate(360deg)
+  }
+}
+
+.admin-teams-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid #d0d5dd;
+  border-radius: 50%;
+  color: #667085;
+  font-size: 16px;
+  font-weight: 800
+}
+
+.admin-teams-table-wrap {
+  width: 100%;
+  overflow-x: auto
+}
+
+.admin-teams-table {
+  width: 100%;
+  min-width: 980px;
+  table-layout: fixed;
+  border-collapse: collapse
+}
+
+.admin-teams-table th {
+  height: 48px;
+  padding: 0 16px;
+  border-bottom: 1px solid #e4e7ec;
+  background: #f8fafc;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .045em;
+  text-align: left;
+  text-transform: uppercase
+}
+
+.admin-teams-table td {
+  height: 72px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f2f5;
+  vertical-align: middle
+}
+
+.admin-teams-table tbody tr:last-child td {
+  border-bottom: 0
+}
+
+.admin-teams-table tbody tr:hover td {
+  background: #fbfcfd
+}
+
+.admin-teams-id {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700
+}
+
+.admin-teams-user {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0
+}
+
+.admin-teams-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #eef2f6;
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800
+}
+
+.admin-teams-user strong {
+  display: block;
+  overflow: hidden;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis
+}
+
+.admin-teams-user span {
+  display: block;
+  margin-top: 3px;
+  color: #98a2b3;
+  font-size: 11px
+}
+
+.admin-teams-description,
+.admin-teams-date {
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.4
+}
+
+.admin-teams-members {
+  display: inline-flex;
+  min-width: 28px;
+  justify-content: center;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 700
+}
+
+.admin-teams-manage-button {
+  min-width: 74px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #344054;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer
+}
+
+.admin-teams-manage-button:hover {
+  background: #f9fafb;
+  border-color: #98a2b3
+}
+
+.admin-teams-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(16, 24, 40, .44);
+  backdrop-filter: blur(2px)
+}
+
+.admin-teams-side-panel {
+  width: min(430px, 100%);
+  height: 100vh;
+  padding: 30px;
+  background: #fff;
+  box-sizing: border-box;
+  box-shadow: -14px 0 34px rgba(16, 24, 40, .14);
+  overflow-y: auto
+}
+
+.admin-teams-edit-modal {
+  width: min(680px, calc(100% - 32px));
+  max-height: calc(100vh - 64px);
+  margin: auto;
+  border: 1px solid #e4e7ec;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 50px rgba(16, 24, 40, .18);
+  overflow: hidden
+}
+
+.admin-teams-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid #eaecf0
+}
+
+.admin-teams-edit-modal .admin-teams-panel-header {
+  padding: 26px 28px 22px
+}
+
+.admin-teams-panel-header p {
+  margin: 0 0 7px;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase
+}
+
+.admin-teams-panel-header h2 {
+  margin: 0;
+  color: #101828;
+  font-size: 23px;
+  font-weight: 750;
+  line-height: 1.25
+}
+
+.admin-teams-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #e4e7ec;
+  border-radius: 9px;
+  background: #fff;
+  color: #667085;
+  font-size: 23px;
+  cursor: pointer
+}
+
+.admin-teams-close:hover {
+  background: #f8fafc;
+  color: #101828
+}
+
+.admin-teams-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 0
+}
+
+.admin-teams-large-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 54px;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: #eef2f6;
+  color: #344054;
+  font-size: 18px;
+  font-weight: 800
+}
+
+.admin-teams-profile strong {
+  display: block;
+  color: #101828;
+  font-size: 16px
+}
+
+.admin-teams-profile span {
+  display: block;
+  margin-top: 4px;
+  color: #98a2b3;
+  font-size: 12px
+}
+
+.admin-teams-detail-list>div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 17px 0;
+  border-bottom: 1px solid #f0f2f5
+}
+
+.admin-teams-detail-list span {
+  flex: 0 0 82px;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 600
+}
+
+.admin-teams-detail-list strong {
+  min-width: 0;
+  color: #101828;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere
+}
+
+.admin-teams-panel-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding-top: 24px
+}
+
+.admin-teams-panel-actions .admin-teams-danger-button {
+  grid-column: 1/-1
+}
+
+.admin-teams-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 26px 28px 28px;
+  overflow-y: auto
+}
+
+.admin-teams-field>label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700
+}
+
+.admin-teams-field>label>span {
+  color: #98a2b3;
+  font-size: 11px;
+  font-weight: 600
+}
+
+.admin-teams-field input,
+.admin-teams-field textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid #d0d5dd;
+  border-radius: 9px;
+  outline: 0;
+  background: #fff;
+  color: #101828;
+  font-family: inherit;
+  font-size: 13px;
+  box-sizing: border-box
+}
+
+.admin-teams-field input {
+  height: 44px
+}
+
+.admin-teams-field textarea {
+  resize: vertical
+}
+
+.admin-teams-field input:focus,
+.admin-teams-field textarea:focus {
+  border-color: #667085;
+  box-shadow: 0 0 0 3px rgba(71, 84, 103, .08)
+}
+
+.admin-teams-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 6px
+}
+
+.admin-teams-edit-error {
+  padding: 12px 14px;
+  border: 1px solid #fecdca;
+  border-radius: 9px;
+  background: #fff6f5;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45
+}
+
+@media(max-width:900px) {
+  .admin-teams-page {
+    padding: 20px
+  }
+
+  .admin-teams-page-header {
+    align-items: flex-start;
+    flex-direction: column
+  }
+
+  .admin-teams-stat-grid {
+    grid-template-columns: 1fr
+  }
+
+  .admin-teams-directory-header {
+    flex-direction: column
+  }
+
+  .admin-teams-side-panel {
+    width: 100%
+  }
+}
+
+@media(max-width:560px) {
+  .admin-teams-header-actions {
+    width: 100%
+  }
+
+  .admin-teams-header-actions button {
+    flex: 1
+  }
+
+  .admin-teams-title-block h1 {
+    font-size: 26px
+  }
+}

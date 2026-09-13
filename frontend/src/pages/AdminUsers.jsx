@@ -1,10 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
+
 import {
   getTeams,
   getUsers,
   updateUser,
 } from "../services/api";
+
 import "./AdminUsers.css";
+
+const LOCAL_API_BASE_URL =
+  "http://127.0.0.1:8000";
+
+const PRODUCTION_API_BASE_URL =
+  "https://ai-it-support-system.onrender.com";
+
+function getApiBaseUrl() {
+  const hostname =
+    window.location.hostname;
+
+  if (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1"
+  ) {
+    return LOCAL_API_BASE_URL;
+  }
+
+  return PRODUCTION_API_BASE_URL;
+}
 
 function getStoredValue(key) {
   return (
@@ -15,7 +37,8 @@ function getStoredValue(key) {
 }
 
 function getStoredUser() {
-  const storedUser = getStoredValue("user");
+  const storedUser =
+    getStoredValue("user");
 
   if (!storedUser) {
     return null;
@@ -35,7 +58,9 @@ function getRoleName(roleId) {
     3: "Admin",
   };
 
-  return roleMap[roleId] || "Unknown";
+  return (
+    roleMap[roleId] || "Unknown"
+  );
 }
 
 function getRoleClass(roleId) {
@@ -45,19 +70,29 @@ function getRoleClass(roleId) {
     3: "admin",
   };
 
-  return roleMap[roleId] || "unknown";
+  return (
+    roleMap[roleId] || "unknown"
+  );
 }
 
-function getTeamName(teamId, teams) {
+function getTeamName(
+  teamId,
+  teams
+) {
   if (!teamId) {
     return "No team";
   }
 
   const team = teams.find(
-    (item) => item.id === teamId
+    (item) =>
+      Number(item.id) ===
+      Number(teamId)
   );
 
-  return team?.name || `Team ${teamId}`;
+  return (
+    team?.name ||
+    `Team ${teamId}`
+  );
 }
 
 function getInitial(name) {
@@ -65,43 +100,163 @@ function getInitial(name) {
     return "?";
   }
 
-  return name.trim().charAt(0).toUpperCase();
+  return name
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+}
+
+async function adminRequest(
+  endpoint,
+  options = {}
+) {
+  const accessToken =
+    getStoredValue("access_token");
+
+  if (!accessToken) {
+    throw new Error(
+      "Your login session has expired. Please log in again."
+    );
+  }
+
+  const baseUrl =
+    getApiBaseUrl();
+
+  const response = await fetch(
+    `${baseUrl}${endpoint}`,
+    {
+      ...options,
+      headers: {
+        ...(options.body
+          ? {
+              "Content-Type":
+                "application/json",
+            }
+          : {}),
+        Authorization: `Bearer ${accessToken}`,
+        ...(options.headers || {}),
+      },
+    }
+  );
+
+  const contentType =
+    response.headers.get(
+      "content-type"
+    ) || "";
+
+  const data =
+    contentType.includes(
+      "application/json"
+    )
+      ? await response.json()
+      : null;
+
+  if (!response.ok) {
+    throw new Error(
+      data?.detail ||
+        data?.message ||
+        "The requested operation failed."
+    );
+  }
+
+  return data;
 }
 
 function AdminUsers({ onBack }) {
-  const [users, setUsers] = useState([]);
-  const [teams, setTeams] = useState([]);
+  const [users, setUsers] =
+    useState([]);
 
-  const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [teams, setTeams] =
+    useState([]);
 
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [editingUser, setEditingUser] = useState(null);
+  const [search, setSearch] =
+    useState("");
 
-  const [editName, setEditName] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editRoleId, setEditRoleId] = useState("1");
-  const [editTeamId, setEditTeamId] = useState("");
-  const [editPassword, setEditPassword] = useState("");
+  const [roleFilter, setRoleFilter] =
+    useState("ALL");
 
-  const [savingUser, setSavingUser] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState("");
+  const [statusFilter, setStatusFilter] =
+    useState("ALL");
 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
+  const [selectedUser, setSelectedUser] =
+    useState(null);
 
-  const accessToken = getStoredValue("access_token");
-  const currentUser = getStoredUser();
+  const [editingUser, setEditingUser] =
+    useState(null);
 
-  async function loadUsers(showRefresh = false) {
+  const [creatingUser, setCreatingUser] =
+    useState(false);
+
+  const [editName, setEditName] =
+    useState("");
+
+  const [editEmail, setEditEmail] =
+    useState("");
+
+  const [editRoleId, setEditRoleId] =
+    useState("1");
+
+  const [editTeamId, setEditTeamId] =
+    useState("");
+
+  const [editPassword, setEditPassword] =
+    useState("");
+
+  const [editStatus, setEditStatus] =
+    useState("ACTIVE");
+
+  const [createName, setCreateName] =
+    useState("");
+
+  const [createEmail, setCreateEmail] =
+    useState("");
+
+  const [createPassword, setCreatePassword] =
+    useState("");
+
+  const [createRoleId, setCreateRoleId] =
+    useState("1");
+
+  const [createTeamId, setCreateTeamId] =
+    useState("");
+
+  const [savingUser, setSavingUser] =
+    useState(false);
+
+  const [deletingUser, setDeletingUser] =
+    useState(false);
+
+  const [saveError, setSaveError] =
+    useState("");
+
+  const [saveSuccess, setSaveSuccess] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [refreshing, setRefreshing] =
+    useState(false);
+
+  const [error, setError] =
+    useState("");
+
+  const accessToken =
+    getStoredValue("access_token");
+
+  const currentUser =
+    getStoredUser();
+
+  async function loadUsers(
+    showRefresh = false
+  ) {
     if (!accessToken) {
       setError(
         "Your login session has expired. Please log in again."
       );
+
       setLoading(false);
+
       return;
     }
 
@@ -114,7 +269,10 @@ function AdminUsers({ onBack }) {
 
       setError("");
 
-      const [usersData, teamsData] = await Promise.all([
+      const [
+        usersData,
+        teamsData,
+      ] = await Promise.all([
         getUsers(accessToken),
         getTeams(accessToken),
       ]);
@@ -145,136 +303,174 @@ function AdminUsers({ onBack }) {
     loadUsers();
   }, []);
 
-  const filteredUsers = useMemo(() => {
-    const value = search.trim().toLowerCase();
+  const filteredUsers =
+    useMemo(() => {
+      const value =
+        search.trim().toLowerCase();
 
-    return users.filter((user) => {
-      const roleName =
-        getRoleName(
-          user.role_id
-        ).toLowerCase();
+      return users.filter(
+        (user) => {
+          const roleName =
+            getRoleName(
+              user.role_id
+            ).toLowerCase();
 
-      const teamName =
-        getTeamName(
-          user.team_id,
-          teams
-        ).toLowerCase();
+          const teamName =
+            getTeamName(
+              user.team_id,
+              teams
+            ).toLowerCase();
 
-      const matchesSearch =
-        !value ||
-        String(user.id).includes(value) ||
-        String(user.name || "")
-          .toLowerCase()
-          .includes(value) ||
-        String(user.email || "")
-          .toLowerCase()
-          .includes(value) ||
-        roleName.includes(value) ||
-        teamName.includes(value);
+          const matchesSearch =
+            !value ||
+            String(user.id).includes(
+              value
+            ) ||
+            String(user.name || "")
+              .toLowerCase()
+              .includes(value) ||
+            String(user.email || "")
+              .toLowerCase()
+              .includes(value) ||
+            roleName.includes(value) ||
+            teamName.includes(value);
 
-      const matchesRole =
-        roleFilter === "ALL" ||
-        String(user.role_id) === roleFilter;
+          const matchesRole =
+            roleFilter === "ALL" ||
+            String(
+              user.role_id
+            ) === roleFilter;
 
-      const matchesStatus =
-        statusFilter === "ALL" ||
-        (
-          statusFilter === "ACTIVE" &&
-          user.is_active === true
-        ) ||
-        (
-          statusFilter === "INACTIVE" &&
-          user.is_active === false
-        );
+          const matchesStatus =
+            statusFilter === "ALL" ||
+            (
+              statusFilter ===
+                "ACTIVE" &&
+              user.is_active === true
+            ) ||
+            (
+              statusFilter ===
+                "INACTIVE" &&
+              user.is_active === false
+            );
 
-      return (
-        matchesSearch &&
-        matchesRole &&
-        matchesStatus
+          return (
+            matchesSearch &&
+            matchesRole &&
+            matchesStatus
+          );
+        }
       );
-    });
-  }, [
-    users,
-    teams,
-    search,
-    roleFilter,
-    statusFilter,
-  ]);
+    }, [
+      users,
+      teams,
+      search,
+      roleFilter,
+      statusFilter,
+    ]);
 
-  const totalUsers = users.length;
+  const totalUsers =
+    users.length;
 
-  const activeUsers = users.filter(
-    (user) => user.is_active === true
-  ).length;
+  const activeUsers =
+    users.filter(
+      (user) =>
+        user.is_active === true
+    ).length;
 
-  const inactiveUsers = users.filter(
-    (user) => user.is_active === false
-  ).length;
+  const inactiveUsers =
+    users.filter(
+      (user) =>
+        user.is_active === false
+    ).length;
 
-  const employeeCount = users.filter(
-    (user) => user.role_id === 1
-  ).length;
+  const employeeCount =
+    users.filter(
+      (user) =>
+        Number(user.role_id) === 1
+    ).length;
 
-  const engineerCount = users.filter(
-    (user) => user.role_id === 2
-  ).length;
+  const engineerCount =
+    users.filter(
+      (user) =>
+        Number(user.role_id) === 2
+    ).length;
 
-  const adminCount = users.filter(
-    (user) => user.role_id === 3
-  ).length;
+  const adminCount =
+    users.filter(
+      (user) =>
+        Number(user.role_id) === 3
+    ).length;
 
-  function handleManageUser(user) {
+  function handleManageUser(
+    user
+  ) {
     setSelectedUser(user);
     setSaveError("");
     setSaveSuccess("");
   }
 
   function handleCloseUserPanel() {
-    setSelectedUser(null);
-  }
-
-  function handleOpenEditUser() {
-    if (!selectedUser) {
+    if (deletingUser) {
       return;
     }
 
-    setEditName(selectedUser.name || "");
-    setEditEmail(selectedUser.email || "");
-    setEditRoleId(
-      String(selectedUser.role_id || 1)
-    );
-    setEditTeamId(
-      selectedUser.team_id
-        ? String(selectedUser.team_id)
-        : ""
-    );
-    setEditPassword("");
-
-    setSaveError("");
-    setSaveSuccess("");
-    setEditingUser(true);
-  }
-
-  function handleCloseEditUser() {
-    setEditingUser(false);
+    setSelectedUser(null);
     setSaveError("");
     setSaveSuccess("");
   }
 
-  async function handleSaveUser(event) {
+  function handleOpenCreateUser() {
+    setSelectedUser(null);
+
+    setCreatingUser(true);
+
+    setCreateName("");
+    setCreateEmail("");
+    setCreatePassword("");
+    setCreateRoleId("1");
+    setCreateTeamId("");
+
+    setSaveError("");
+    setSaveSuccess("");
+  }
+
+  function handleCloseCreateUser() {
+    if (savingUser) {
+      return;
+    }
+
+    setCreatingUser(false);
+
+    setCreateName("");
+    setCreateEmail("");
+    setCreatePassword("");
+    setCreateRoleId("1");
+    setCreateTeamId("");
+
+    setSaveError("");
+    setSaveSuccess("");
+  }
+
+  async function handleCreateUser(
+    event
+  ) {
     event.preventDefault();
 
-    if (!selectedUser) {
-      return;
-    }
+    const name =
+      createName.trim();
 
-    const name = editName.trim();
-    const email = editEmail.trim();
+    const email =
+      createEmail.trim();
+
+    const password =
+      createPassword.trim();
 
     if (name.length < 2) {
       setSaveError(
         "Name must contain at least 2 characters."
       );
+
       return;
     }
 
@@ -282,6 +478,15 @@ function AdminUsers({ onBack }) {
       setSaveError(
         "Email address is required."
       );
+
+      return;
+    }
+
+    if (password.length < 6) {
+      setSaveError(
+        "Password must contain at least 6 characters."
+      );
+
       return;
     }
 
@@ -290,30 +495,203 @@ function AdminUsers({ onBack }) {
     setSaveSuccess("");
 
     try {
-      const updatedUser = await updateUser(
-        accessToken,
-        selectedUser.id,
-        {
-          name,
-          email,
-          password: editPassword.trim(),
-          role_id: Number(editRoleId),
-          team_id:
-            editTeamId === ""
-              ? null
-              : Number(editTeamId),
-        }
+      const newUser =
+        await adminRequest(
+          "/api/users/",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              name,
+              email,
+              password,
+              role_id:
+                Number(
+                  createRoleId
+                ),
+              team_id:
+                createTeamId === ""
+                  ? null
+                  : Number(
+                      createTeamId
+                    ),
+            }),
+          }
+        );
+
+      setUsers(
+        (currentUsers) => [
+          ...currentUsers,
+          newUser,
+        ]
       );
 
-      setUsers((currentUsers) =>
-        currentUsers.map((user) =>
-          user.id === updatedUser.id
-            ? updatedUser
-            : user
-        )
+      setCreatingUser(false);
+
+      setCreateName("");
+      setCreateEmail("");
+      setCreatePassword("");
+      setCreateRoleId("1");
+      setCreateTeamId("");
+
+      setSaveSuccess(
+        `${
+          newUser.name || name
+        } created successfully.`
+      );
+    } catch (err) {
+      setSaveError(
+        err?.message ||
+          "Unable to create user."
+      );
+    } finally {
+      setSavingUser(false);
+    }
+  }
+
+  function handleOpenEditUser() {
+    if (!selectedUser) {
+      return;
+    }
+
+    setEditName(
+      selectedUser.name || ""
+    );
+
+    setEditEmail(
+      selectedUser.email || ""
+    );
+
+    setEditRoleId(
+      String(
+        selectedUser.role_id || 1
+      )
+    );
+
+    setEditTeamId(
+      selectedUser.team_id
+        ? String(
+            selectedUser.team_id
+          )
+        : ""
+    );
+
+    setEditPassword("");
+
+    setEditStatus(
+      selectedUser.is_active
+        ? "ACTIVE"
+        : "INACTIVE"
+    );
+
+    setSaveError("");
+    setSaveSuccess("");
+
+    setEditingUser(true);
+  }
+
+  function handleCloseEditUser() {
+    setEditingUser(false);
+
+    setSaveError("");
+    setSaveSuccess("");
+  }
+
+  async function handleSaveUser(
+    event
+  ) {
+    event.preventDefault();
+
+    if (!selectedUser) {
+      return;
+    }
+
+    const name =
+      editName.trim();
+
+    const email =
+      editEmail.trim();
+
+    if (name.length < 2) {
+      setSaveError(
+        "Name must contain at least 2 characters."
       );
 
-      setSelectedUser(updatedUser);
+      return;
+    }
+
+    if (!email) {
+      setSaveError(
+        "Email address is required."
+      );
+
+      return;
+    }
+
+    setSavingUser(true);
+    setSaveError("");
+    setSaveSuccess("");
+
+    try {
+      const updatedUser =
+        await updateUser(
+          accessToken,
+          selectedUser.id,
+          {
+            name,
+            email,
+            password:
+              editPassword.trim(),
+            role_id:
+              Number(
+                editRoleId
+              ),
+            team_id:
+              editTeamId === ""
+                ? null
+                : Number(
+                    editTeamId
+                  ),
+          }
+        );
+
+      let finalUser =
+        updatedUser;
+
+      const desiredStatus =
+        editStatus === "ACTIVE";
+
+      const currentStatus =
+        updatedUser.is_active ===
+        true;
+
+      if (
+        desiredStatus !==
+        currentStatus
+      ) {
+        finalUser =
+          await adminRequest(
+            `/api/users/${selectedUser.id}/status?is_active=${desiredStatus}`,
+            {
+              method: "PATCH",
+            }
+          );
+      }
+
+      setUsers(
+        (currentUsers) =>
+          currentUsers.map(
+            (user) =>
+              Number(user.id) ===
+              Number(finalUser.id)
+                ? finalUser
+                : user
+          )
+      );
+
+      setSelectedUser(
+        finalUser
+      );
+
       setEditingUser(false);
       setEditPassword("");
 
@@ -330,9 +708,77 @@ function AdminUsers({ onBack }) {
     }
   }
 
+  async function handleDeleteUser() {
+    if (!selectedUser) {
+      return;
+    }
+
+    if (
+      Number(selectedUser.id) ===
+      Number(currentUser?.id)
+    ) {
+      setSaveError(
+        "You cannot delete your own account."
+      );
+
+      return;
+    }
+
+    const userName =
+      selectedUser.name ||
+      `User #${selectedUser.id}`;
+
+    const shouldDelete =
+      window.confirm(
+        `Delete "${userName}"?\n\nThis action cannot be undone.`
+      );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    try {
+      setDeletingUser(true);
+      setSaveError("");
+      setSaveSuccess("");
+
+      await adminRequest(
+        `/api/users/${selectedUser.id}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      setUsers(
+        (currentUsers) =>
+          currentUsers.filter(
+            (user) =>
+              Number(user.id) !==
+              Number(selectedUser.id)
+          )
+      );
+
+      setSelectedUser(null);
+
+      setSaveSuccess(
+        `User "${userName}" deleted successfully.`
+      );
+
+      await loadUsers(true);
+    } catch (err) {
+      setSaveError(
+        err?.message ||
+          "Unable to delete user."
+      );
+    } finally {
+      setDeletingUser(false);
+    }
+  }
+
   if (
     !currentUser ||
-    currentUser.role_id !== 3
+    Number(currentUser.role_id) !==
+      3
   ) {
     return (
       <div className="admin-users-page">
@@ -341,11 +787,13 @@ function AdminUsers({ onBack }) {
             !
           </div>
 
-          <h2>Access denied</h2>
+          <h2>
+            Access denied
+          </h2>
 
           <p>
-            Only administrators can access
-            user management.
+            Only administrators can
+            access user management.
           </p>
 
           <button
@@ -377,28 +825,51 @@ function AdminUsers({ onBack }) {
               Administration
             </p>
 
-            <h1>Users Management</h1>
+            <h1>
+              Users Management
+            </h1>
 
             <p className="admin-users-subtitle">
-              Manage employees, support engineers,
-              and administrators.
+              Manage employees, support
+              engineers, and administrators.
             </p>
           </div>
 
-          <button
-            type="button"
-            className="admin-users-refresh-button"
-            onClick={() => loadUsers(true)}
-            disabled={refreshing}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
           >
-            <span className="admin-users-refresh-icon">
-              ↻
-            </span>
+            <button
+              type="button"
+              className="admin-users-refresh-button"
+              onClick={() =>
+                loadUsers(true)
+              }
+              disabled={refreshing}
+            >
+              <span className="admin-users-refresh-icon">
+                ↻
+              </span>
 
-            {refreshing
-              ? "Refreshing..."
-              : "Refresh"}
-          </button>
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
+            </button>
+
+            <button
+              type="button"
+              className="admin-users-details-primary"
+              onClick={
+                handleOpenCreateUser
+              }
+            >
+              + Create User
+            </button>
+          </div>
         </header>
 
         <section className="admin-users-stat-grid">
@@ -486,12 +957,16 @@ function AdminUsers({ onBack }) {
         <section className="admin-users-directory">
           <div className="admin-users-directory-header">
             <div>
-              <h2>User Directory</h2>
+              <h2>
+                User Directory
+              </h2>
 
               <p>
                 Showing{" "}
                 <strong>
-                  {filteredUsers.length}
+                  {
+                    filteredUsers.length
+                  }
                 </strong>{" "}
                 of {totalUsers} users
               </p>
@@ -499,21 +974,30 @@ function AdminUsers({ onBack }) {
 
             <div className="admin-users-role-summary">
               <div className="admin-users-role-count">
-                <span>Employees</span>
+                <span>
+                  Employees
+                </span>
+
                 <strong>
                   {employeeCount}
                 </strong>
               </div>
 
               <div className="admin-users-role-count">
-                <span>Engineers</span>
+                <span>
+                  Engineers
+                </span>
+
                 <strong>
                   {engineerCount}
                 </strong>
               </div>
 
               <div className="admin-users-role-count">
-                <span>Admins</span>
+                <span>
+                  Admins
+                </span>
+
                 <strong>
                   {adminCount}
                 </strong>
@@ -614,7 +1098,9 @@ function AdminUsers({ onBack }) {
                   Unable to load users
                 </strong>
 
-                <span>{error}</span>
+                <span>
+                  {error}
+                </span>
               </div>
 
               <button
@@ -627,6 +1113,14 @@ function AdminUsers({ onBack }) {
               </button>
             </div>
           )}
+
+          {saveSuccess &&
+            !selectedUser &&
+            !creatingUser && (
+              <div className="admin-users-save-success">
+                {saveSuccess}
+              </div>
+            )}
 
           {loading ? (
             <div className="admin-users-loading">
@@ -641,7 +1135,8 @@ function AdminUsers({ onBack }) {
                 information.
               </p>
             </div>
-          ) : filteredUsers.length === 0 ? (
+          ) : filteredUsers.length ===
+            0 ? (
             <div className="admin-users-empty">
               <div className="admin-users-empty-icon">
                 U
@@ -652,8 +1147,8 @@ function AdminUsers({ onBack }) {
               </h3>
 
               <p>
-                Try changing your search or
-                filters.
+                Try changing your search
+                or filters.
               </p>
             </div>
           ) : (
@@ -685,7 +1180,11 @@ function AdminUsers({ onBack }) {
                   <tbody>
                     {filteredUsers.map(
                       (user) => (
-                        <tr key={user.id}>
+                        <tr
+                          key={
+                            user.id
+                          }
+                        >
                           <td>
                             <span className="admin-users-id">
                               #{user.id}
@@ -707,7 +1206,10 @@ function AdminUsers({ onBack }) {
                                 </strong>
 
                                 <span>
-                                  User #{user.id}
+                                  User #
+                                  {
+                                    user.id
+                                  }
                                 </span>
                               </div>
                             </div>
@@ -782,7 +1284,9 @@ function AdminUsers({ onBack }) {
                   (user) => (
                     <div
                       className="admin-users-mobile-card"
-                      key={user.id}
+                      key={
+                        user.id
+                      }
                     >
                       <div className="admin-users-mobile-header">
                         <div className="admin-users-user">
@@ -799,7 +1303,8 @@ function AdminUsers({ onBack }) {
                             </strong>
 
                             <span>
-                              User #{user.id}
+                              User #
+                              {user.id}
                             </span>
                           </div>
                         </div>
@@ -821,7 +1326,9 @@ function AdminUsers({ onBack }) {
 
                       <div className="admin-users-mobile-info">
                         <div>
-                          <span>Email</span>
+                          <span>
+                            Email
+                          </span>
 
                           <strong>
                             {user.email ||
@@ -830,7 +1337,9 @@ function AdminUsers({ onBack }) {
                         </div>
 
                         <div>
-                          <span>Role</span>
+                          <span>
+                            Role
+                          </span>
 
                           <strong>
                             {getRoleName(
@@ -840,7 +1349,9 @@ function AdminUsers({ onBack }) {
                         </div>
 
                         <div>
-                          <span>Team</span>
+                          <span>
+                            Team
+                          </span>
 
                           <strong>
                             {getTeamName(
@@ -891,6 +1402,9 @@ function AdminUsers({ onBack }) {
                   onClick={
                     handleCloseUserPanel
                   }
+                  disabled={
+                    deletingUser
+                  }
                   aria-label="Close user details"
                 >
                   ×
@@ -911,13 +1425,18 @@ function AdminUsers({ onBack }) {
                   </strong>
 
                   <span>
-                    User #{selectedUser.id}
+                    User #
+                    {
+                      selectedUser.id
+                    }
                   </span>
                 </div>
               </div>
 
               <div className="admin-users-details-status-row">
-                <span>Status</span>
+                <span>
+                  Status
+                </span>
 
                 <span
                   className={`admin-users-status ${
@@ -936,7 +1455,9 @@ function AdminUsers({ onBack }) {
 
               <div className="admin-users-details-list">
                 <div className="admin-users-detail-item">
-                  <span>Email</span>
+                  <span>
+                    Email
+                  </span>
 
                   <strong>
                     {selectedUser.email ||
@@ -945,7 +1466,9 @@ function AdminUsers({ onBack }) {
                 </div>
 
                 <div className="admin-users-detail-item">
-                  <span>Role</span>
+                  <span>
+                    Role
+                  </span>
 
                   <strong>
                     {getRoleName(
@@ -955,7 +1478,9 @@ function AdminUsers({ onBack }) {
                 </div>
 
                 <div className="admin-users-detail-item">
-                  <span>Team</span>
+                  <span>
+                    Team
+                  </span>
 
                   <strong>
                     {getTeamName(
@@ -966,7 +1491,9 @@ function AdminUsers({ onBack }) {
                 </div>
 
                 <div className="admin-users-detail-item">
-                  <span>User ID</span>
+                  <span>
+                    User ID
+                  </span>
 
                   <strong>
                     #{selectedUser.id}
@@ -974,11 +1501,18 @@ function AdminUsers({ onBack }) {
                 </div>
               </div>
 
-              {saveSuccess && !editingUser && (
-                <div className="admin-users-save-success">
-                  {saveSuccess}
+              {saveError && !editingUser && (
+                <div className="admin-users-edit-error">
+                  {saveError}
                 </div>
               )}
+
+              {saveSuccess &&
+                !editingUser && (
+                  <div className="admin-users-save-success">
+                    {saveSuccess}
+                  </div>
+                )}
 
               <div className="admin-users-details-actions">
                 <button
@@ -986,6 +1520,9 @@ function AdminUsers({ onBack }) {
                   className="admin-users-details-secondary"
                   onClick={
                     handleCloseUserPanel
+                  }
+                  disabled={
+                    deletingUser
                   }
                 >
                   Close
@@ -997,15 +1534,33 @@ function AdminUsers({ onBack }) {
                   onClick={
                     handleOpenEditUser
                   }
+                  disabled={
+                    deletingUser
+                  }
                 >
                   Edit User
+                </button>
+
+                <button
+                  type="button"
+                  className="admin-users-danger-button"
+                  onClick={
+                    handleDeleteUser
+                  }
+                  disabled={
+                    deletingUser
+                  }
+                >
+                  {deletingUser
+                    ? "Deleting..."
+                    : "Delete User"}
                 </button>
               </div>
             </aside>
           </div>
         )}
 
-        {editingUser && selectedUser && (
+        {creatingUser && (
           <div className="admin-users-overlay">
             <div className="admin-users-edit-modal">
               <div className="admin-users-edit-header">
@@ -1015,13 +1570,13 @@ function AdminUsers({ onBack }) {
                   </p>
 
                   <h2>
-                    Edit User
+                    Create User
                   </h2>
 
                   <span>
-                    Update information for{" "}
-                    {selectedUser.name ||
-                      `User #${selectedUser.id}`}
+                    Add a new employee,
+                    support engineer, or
+                    administrator.
                   </span>
                 </div>
 
@@ -1029,10 +1584,12 @@ function AdminUsers({ onBack }) {
                   type="button"
                   className="admin-users-details-close"
                   onClick={
-                    handleCloseEditUser
+                    handleCloseCreateUser
                   }
-                  disabled={savingUser}
-                  aria-label="Close edit form"
+                  disabled={
+                    savingUser
+                  }
+                  aria-label="Close create user form"
                 >
                   ×
                 </button>
@@ -1041,64 +1598,82 @@ function AdminUsers({ onBack }) {
               <form
                 className="admin-users-edit-form"
                 onSubmit={
-                  handleSaveUser
+                  handleCreateUser
                 }
               >
                 <div className="admin-users-form-row">
                   <div className="admin-users-form-field">
-                    <label htmlFor="edit-user-name">
+                    <label htmlFor="create-user-name">
                       Name
                     </label>
 
                     <input
-                      id="edit-user-name"
+                      id="create-user-name"
                       type="text"
-                      value={editName}
-                      onChange={(event) =>
-                        setEditName(
-                          event.target.value
+                      value={createName}
+                      onChange={(
+                        event
+                      ) =>
+                        setCreateName(
+                          event.target
+                            .value
                         )
                       }
                       placeholder="Enter user name"
-                      disabled={savingUser}
+                      disabled={
+                        savingUser
+                      }
+                      autoFocus
                     />
                   </div>
 
                   <div className="admin-users-form-field">
-                    <label htmlFor="edit-user-email">
+                    <label htmlFor="create-user-email">
                       Email
                     </label>
 
                     <input
-                      id="edit-user-email"
+                      id="create-user-email"
                       type="email"
-                      value={editEmail}
-                      onChange={(event) =>
-                        setEditEmail(
-                          event.target.value
+                      value={createEmail}
+                      onChange={(
+                        event
+                      ) =>
+                        setCreateEmail(
+                          event.target
+                            .value
                         )
                       }
                       placeholder="Enter email address"
-                      disabled={savingUser}
+                      disabled={
+                        savingUser
+                      }
                     />
                   </div>
                 </div>
 
                 <div className="admin-users-form-row">
                   <div className="admin-users-form-field">
-                    <label htmlFor="edit-user-role">
+                    <label htmlFor="create-user-role">
                       Role
                     </label>
 
                     <select
-                      id="edit-user-role"
-                      value={editRoleId}
-                      onChange={(event) =>
-                        setEditRoleId(
-                          event.target.value
+                      id="create-user-role"
+                      value={
+                        createRoleId
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setCreateRoleId(
+                          event.target
+                            .value
                         )
                       }
-                      disabled={savingUser}
+                      disabled={
+                        savingUser
+                      }
                     >
                       <option value="1">
                         Employee
@@ -1115,19 +1690,26 @@ function AdminUsers({ onBack }) {
                   </div>
 
                   <div className="admin-users-form-field">
-                    <label htmlFor="edit-user-team">
+                    <label htmlFor="create-user-team">
                       Team
                     </label>
 
                     <select
-                      id="edit-user-team"
-                      value={editTeamId}
-                      onChange={(event) =>
-                        setEditTeamId(
-                          event.target.value
+                      id="create-user-team"
+                      value={
+                        createTeamId
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setCreateTeamId(
+                          event.target
+                            .value
                         )
                       }
-                      disabled={savingUser}
+                      disabled={
+                        savingUser
+                      }
                     >
                       <option value="">
                         No team
@@ -1136,10 +1718,16 @@ function AdminUsers({ onBack }) {
                       {teams.map(
                         (team) => (
                           <option
-                            key={team.id}
-                            value={team.id}
+                            key={
+                              team.id
+                            }
+                            value={
+                              team.id
+                            }
                           >
-                            {team.name}
+                            {
+                              team.name
+                            }
                           </option>
                         )
                       )}
@@ -1148,29 +1736,33 @@ function AdminUsers({ onBack }) {
                 </div>
 
                 <div className="admin-users-form-field">
-                  <label htmlFor="edit-user-password">
-                    New Password
-                    <span>
-                      Optional
-                    </span>
+                  <label htmlFor="create-user-password">
+                    Temporary Password
                   </label>
 
                   <input
-                    id="edit-user-password"
+                    id="create-user-password"
                     type="password"
-                    value={editPassword}
-                    onChange={(event) =>
-                      setEditPassword(
-                        event.target.value
+                    value={
+                      createPassword
+                    }
+                    onChange={(
+                      event
+                    ) =>
+                      setCreatePassword(
+                        event.target
+                          .value
                       )
                     }
-                    placeholder="Leave blank to keep current password"
-                    disabled={savingUser}
+                    placeholder="Enter initial password"
+                    disabled={
+                      savingUser
+                    }
                   />
 
                   <small>
-                    Only enter a password when
-                    you want to change it.
+                    The password must contain
+                    at least 6 characters.
                   </small>
                 </div>
 
@@ -1185,9 +1777,11 @@ function AdminUsers({ onBack }) {
                     type="button"
                     className="admin-users-details-secondary"
                     onClick={
-                      handleCloseEditUser
+                      handleCloseCreateUser
                     }
-                    disabled={savingUser}
+                    disabled={
+                      savingUser
+                    }
                   >
                     Cancel
                   </button>
@@ -1195,17 +1789,307 @@ function AdminUsers({ onBack }) {
                   <button
                     type="submit"
                     className="admin-users-details-primary"
-                    disabled={savingUser}
+                    disabled={
+                      savingUser
+                    }
                   >
                     {savingUser
-                      ? "Saving..."
-                      : "Save Changes"}
+                      ? "Creating..."
+                      : "Create User"}
                   </button>
                 </div>
               </form>
             </div>
           </div>
         )}
+
+        {editingUser &&
+          selectedUser && (
+            <div className="admin-users-overlay">
+              <div className="admin-users-edit-modal">
+                <div className="admin-users-edit-header">
+                  <div>
+                    <p>
+                      User Management
+                    </p>
+
+                    <h2>
+                      Edit User
+                    </h2>
+
+                    <span>
+                      Update information for{" "}
+                      {selectedUser.name ||
+                        `User #${selectedUser.id}`}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="admin-users-details-close"
+                    onClick={
+                      handleCloseEditUser
+                    }
+                    disabled={
+                      savingUser
+                    }
+                    aria-label="Close edit form"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <form
+                  className="admin-users-edit-form"
+                  onSubmit={
+                    handleSaveUser
+                  }
+                >
+                  <div className="admin-users-form-row">
+                    <div className="admin-users-form-field">
+                      <label htmlFor="edit-user-name">
+                        Name
+                      </label>
+
+                      <input
+                        id="edit-user-name"
+                        type="text"
+                        value={
+                          editName
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setEditName(
+                            event.target
+                              .value
+                          )
+                        }
+                        placeholder="Enter user name"
+                        disabled={
+                          savingUser
+                        }
+                      />
+                    </div>
+
+                    <div className="admin-users-form-field">
+                      <label htmlFor="edit-user-email">
+                        Email
+                      </label>
+
+                      <input
+                        id="edit-user-email"
+                        type="email"
+                        value={
+                          editEmail
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setEditEmail(
+                            event.target
+                              .value
+                          )
+                        }
+                        placeholder="Enter email address"
+                        disabled={
+                          savingUser
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="admin-users-form-row">
+                    <div className="admin-users-form-field">
+                      <label htmlFor="edit-user-role">
+                        Role
+                      </label>
+
+                      <select
+                        id="edit-user-role"
+                        value={
+                          editRoleId
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setEditRoleId(
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          savingUser
+                        }
+                      >
+                        <option value="1">
+                          Employee
+                        </option>
+
+                        <option value="2">
+                          Support Engineer
+                        </option>
+
+                        <option value="3">
+                          Admin
+                        </option>
+                      </select>
+                    </div>
+
+                    <div className="admin-users-form-field">
+                      <label htmlFor="edit-user-team">
+                        Team
+                      </label>
+
+                      <select
+                        id="edit-user-team"
+                        value={
+                          editTeamId
+                        }
+                        onChange={(
+                          event
+                        ) =>
+                          setEditTeamId(
+                            event.target
+                              .value
+                          )
+                        }
+                        disabled={
+                          savingUser
+                        }
+                      >
+                        <option value="">
+                          No team
+                        </option>
+
+                        {teams.map(
+                          (team) => (
+                            <option
+                              key={
+                                team.id
+                              }
+                              value={
+                                team.id
+                              }
+                            >
+                              {
+                                team.name
+                              }
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="admin-users-form-field">
+                    <label htmlFor="edit-user-status">
+                      Status
+                    </label>
+
+                    <select
+                      id="edit-user-status"
+                      value={
+                        editStatus
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEditStatus(
+                          event.target
+                            .value
+                        )
+                      }
+                      disabled={
+                        savingUser
+                      }
+                    >
+                      <option value="ACTIVE">
+                        Active
+                      </option>
+
+                      <option value="INACTIVE">
+                        Inactive
+                      </option>
+                    </select>
+
+                    <small>
+                      Inactive users will not be
+                      able to use their account
+                      until they are reactivated.
+                    </small>
+                  </div>
+
+                  <div className="admin-users-form-field">
+                    <label htmlFor="edit-user-password">
+                      New Password{" "}
+                      <span>
+                        Optional
+                      </span>
+                    </label>
+
+                    <input
+                      id="edit-user-password"
+                      type="password"
+                      value={
+                        editPassword
+                      }
+                      onChange={(
+                        event
+                      ) =>
+                        setEditPassword(
+                          event.target
+                            .value
+                        )
+                      }
+                      placeholder="Leave blank to keep current password"
+                      disabled={
+                        savingUser
+                      }
+                    />
+
+                    <small>
+                      Only enter a password when
+                      you want to change it.
+                    </small>
+                  </div>
+
+                  {saveError && (
+                    <div className="admin-users-edit-error">
+                      {saveError}
+                    </div>
+                  )}
+
+                  <div className="admin-users-edit-footer">
+                    <button
+                      type="button"
+                      className="admin-users-details-secondary"
+                      onClick={
+                        handleCloseEditUser
+                      }
+                      disabled={
+                        savingUser
+                      }
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="submit"
+                      className="admin-users-details-primary"
+                      disabled={
+                        savingUser
+                      }
+                    >
+                      {savingUser
+                        ? "Saving..."
+                        : "Save Changes"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
       </div>
     </div>
   );
