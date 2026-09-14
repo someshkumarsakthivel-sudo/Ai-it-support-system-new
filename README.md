@@ -1,7 +1,7 @@
 # AI IT Support System
 
 An AI-powered IT support ticket management system designed to help employees raise IT issues, support engineers resolve assigned tickets, and administrators monitor support operations from one platform.
-
+GitHub: github.com/someshkumarsakthivel-sudo/Ai-it-support-system-new
 ## Key Features
 
 ### AI Ticket Analysis
